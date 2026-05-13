@@ -113,9 +113,14 @@ h1 {
   font-weight: 900;
   text-align: center;
   letter-spacing: 0.5px;
-  background: linear-gradient(90deg, #00d4ff, #8a5bff, #3a7dff);
+  background: linear-gradient(135deg, #ffffff 0%, #ffffff 45%, #ffffff 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.emoji {
+  -webkit-text-fill-color: initial;
+  background: none;
 }
 
 .subtitle {
