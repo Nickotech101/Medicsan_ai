@@ -5,6 +5,9 @@ from dotenv import load_dotenv
 from groq import Groq
 from datetime import datetime
 from io import BytesIO
+import threading
+
+file_lock = threading.Lock()
 
 # PDF
 from reportlab.lib.pagesizes import A4
@@ -26,18 +29,19 @@ ANALYTICS_PATH = os.path.join("data", "analytics.json")
 
 # ================= HELPERS =================
 def load_json(path, default):
-    if not os.path.exists(path):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(default, f, indent=2)
-        return default
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
+    with file_lock:
+        if not os.path.exists(path):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(default, f, indent=2)
+            return default
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
 
 def save_json(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    with file_lock:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
 
 
 MED_DB = load_json(MED_DATA_PATH, {})
@@ -47,7 +51,7 @@ load_json(ANALYTICS_PATH, {})
 
 
 def add_to_history(query: str, source: str):
-    query = query.strip()
+    query = query.strip()[:200]
     if not query:
         return
 
@@ -203,8 +207,8 @@ def analytics_api():
 
 @app.route("/api/medicine", methods=["POST"])
 def medicine_info():
-    data = request.get_json()
-    medicine = (data.get("medicine") or "").strip().lower()
+    data = request.get_json() or {}
+    medicine = (data.get("medicine") or "").strip().lower()[:200]
 
     if not medicine:
         return jsonify({"success": False, "error": "Please enter a medicine name."})
@@ -545,8 +549,8 @@ def assistant_page():
     return render_template("assistant.html")
 @app.route("/api/assistant", methods=["POST"])
 def assistant_api():
-    data = request.get_json()
-    query = (data.get("query") or "").strip()
+    data = request.get_json() or {}
+    query = (data.get("query") or "").strip()[:500]
 
     if not query:
         return jsonify({"success": False, "error": "Empty query."})
