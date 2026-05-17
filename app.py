@@ -176,6 +176,12 @@ def favorites_api():
 @app.route("/api/favorites/toggle", methods=["POST"])
 def favorites_toggle():
     data = request.get_json()
+
+    if not data:
+        return jsonify({
+            "success": False,
+            "error": "Invalid request body."
+        }), 400
     medicine = (data.get("medicine") or "").strip().lower()
     generic_name = (data.get("generic_name") or "").strip()
 
@@ -210,47 +216,75 @@ def analytics_api():
 
 @app.route("/api/medicine", methods=["POST"])
 def medicine_info():
-    data = request.get_json() or {}
-    medicine = (data.get("medicine") or "").strip().lower()[:200]
+    try:
+        data = request.get_json()
 
-    if not medicine:
-        return jsonify({"success": False, "error": "Please enter a medicine name."})
+        if not data:
+            return jsonify({
+                "success": False,
+                "error": "Invalid or missing JSON request body."
+            }), 400
 
-    medicine = " ".join(medicine.split())
+        medicine = (data.get("medicine") or "").strip().lower()[:200]
 
-    # analytics
-    update_analytics(medicine)
+        if not medicine:
+            return jsonify({
+                "success": False,
+                "error": "Please enter a medicine name."
+            }), 400
 
-    # 1) exact match
-    if medicine in MED_DB:
-        add_to_history(medicine, "database")
-        return jsonify({"success": True, "source": "database", "medicine": medicine, "data": MED_DB[medicine]})
+        medicine = " ".join(medicine.split())
 
-    # 2) partial match
-    for key in MED_DB:
-        if medicine in key or key in medicine:
-            add_to_history(key, "database")
+        # analytics
+        update_analytics(medicine)
+
+        # exact match
+        if medicine in MED_DB:
+            add_to_history(medicine, "database")
             return jsonify({
                 "success": True,
                 "source": "database",
-                "medicine": key,
-                "data": MED_DB[key],
-                "note": "Closest match found in database."
-            })
+                "medicine": medicine,
+                "data": MED_DB[medicine]
+            }), 200
 
-    # 3) Groq
-    ai_data, err = groq_medicine_lookup(medicine)
-    if err:
-        return jsonify({"success": False, "error": err})
+        # partial match
+        for key in MED_DB:
+            if medicine in key or key in medicine:
+                add_to_history(key, "database")
+                return jsonify({
+                    "success": True,
+                    "source": "database",
+                    "medicine": key,
+                    "data": MED_DB[key],
+                    "note": "Closest match found in database."
+                }), 200
 
-    add_to_history(medicine, "groq")
-    return jsonify({
-        "success": True,
-        "source": "groq",
-        "medicine": medicine,
-        "data": ai_data,
-        "note": "AI-generated info (educational only)."
-    })
+        # AI lookup
+        ai_data, err = groq_medicine_lookup(medicine)
+
+        if err:
+            return jsonify({
+                "success": False,
+                "error": err
+            }), 500
+
+        add_to_history(medicine, "groq")
+
+        return jsonify({
+            "success": True,
+            "source": "groq",
+            "medicine": medicine,
+            "data": ai_data,
+            "note": "AI-generated info (educational only)."
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": "Internal server error.",
+            "details": str(e)
+        }), 500
 def get_medicine_data(medicine_name: str):
     """
     Returns: (data_dict, source, error)
@@ -308,32 +342,50 @@ def compare_page():
 
 @app.route("/api/compare", methods=["POST"])
 def compare_medicines():
-    data = request.get_json()
+    try:
+        data = request.get_json()
 
-    med_a = (data.get("medicineA") or "").strip()
-    med_b = (data.get("medicineB") or "").strip()
+        if not data:
+            return jsonify({
+                "success": False,
+                "error": "Invalid request body."
+            }), 400
 
-    if not med_a or not med_b:
-        return jsonify({"success": False, "error": "Please enter both medicine names."})
+        med_a = (data.get("medicineA") or "").strip()
+        med_b = (data.get("medicineB") or "").strip()
 
-    a_data, a_source, err_a = get_medicine_data(med_a)
-    if err_a:
-        return jsonify({"success": False, "error": f"Medicine A error: {err_a}"})
+        if not med_a or not med_b:
+            return jsonify({
+                "success": False,
+                "error": "Please enter both medicine names."
+            }), 400
 
-    b_data, b_source, err_b = get_medicine_data(med_b)
-    if err_b:
-        return jsonify({"success": False, "error": f"Medicine B error: {err_b}"})
+        a_data, a_source, err_a = get_medicine_data(med_a)
+        if err_a:
+            return jsonify({
+                "success": False,
+                "error": f"Medicine A error: {err_a}"
+            }), 500
 
-    # Groq verdict (comparison)
-    verdict = None
-    if client:
-        system_prompt = """
+        b_data, b_source, err_b = get_medicine_data(med_b)
+        if err_b:
+            return jsonify({
+                "success": False,
+                "error": f"Medicine B error: {err_b}"
+            }), 500
+
+        # Groq verdict (comparison)
+        verdict = None
+
+        if client:
+            system_prompt = """
 You are MediScan AI, an educational medicine comparison assistant.
 
 Rules:
 - Educational only
 - No diagnosis or prescriptions
 - Mention consult doctor
+
 Return JSON only:
 
 {
@@ -344,7 +396,7 @@ Return JSON only:
 }
 """
 
-        user_prompt = f"""
+            user_prompt = f"""
 Compare these medicines in simple language:
 
 Medicine A: {med_a}
@@ -356,49 +408,79 @@ Data B: {json.dumps(b_data)}
 Return JSON only.
 """
 
-        try:
-            completion = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=[
-                    {"role": "system", "content": system_prompt.strip()},
-                    {"role": "user", "content": user_prompt.strip()},
-                ],
-                temperature=0.2,
-                max_tokens=600,
-            )
-            verdict_text = completion.choices[0].message.content.strip()
-            verdict = json.loads(verdict_text)
-        except Exception:
-            verdict = {
-                "summary": "AI verdict failed. Please try again.",
-                "safer_for_stomach": "depends",
-                "key_differences": [],
-                "warning": "Consult doctor for medical decisions."
-            }
+            try:
+                completion = client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=[
+                        {"role": "system", "content": system_prompt.strip()},
+                        {"role": "user", "content": user_prompt.strip()},
+                    ],
+                    temperature=0.2,
+                    max_tokens=600,
+                )
 
-    return jsonify({
-        "success": True,
-        "medicineA": {"name": med_a, "source": a_source, "data": a_data},
-        "medicineB": {"name": med_b, "source": b_source, "data": b_data},
-        "verdict": verdict
-    })
+                verdict_text = completion.choices[0].message.content.strip()
+                verdict = json.loads(verdict_text)
+
+            except Exception:
+                verdict = {
+                    "summary": "AI verdict failed. Please try again.",
+                    "safer_for_stomach": "depends",
+                    "key_differences": [],
+                    "warning": "Consult doctor for medical decisions."
+                }
+
+        return jsonify({
+            "success": True,
+            "medicineA": {
+                "name": med_a,
+                "source": a_source,
+                "data": a_data
+            },
+            "medicineB": {
+                "name": med_b,
+                "source": b_source,
+                "data": b_data
+            },
+            "verdict": verdict
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": "Failed to compare medicines.",
+            "details": str(e)
+        }), 500
 @app.route("/interaction")
 def interaction_page():
     return render_template("interaction.html")
 @app.route("/api/interaction", methods=["POST"])
 def medicine_interaction():
-    data = request.get_json()
+    try:
+        data = request.get_json()
 
-    med_a = (data.get("medicineA") or "").strip()
-    med_b = (data.get("medicineB") or "").strip()
+        if not data:
+            return jsonify({
+                "success": False,
+                "error": "Invalid request body."
+            }), 400
 
-    if not med_a or not med_b:
-        return jsonify({"success": False, "error": "Please enter both medicine names."})
+        med_a = (data.get("medicineA") or "").strip()
+        med_b = (data.get("medicineB") or "").strip()
 
-    if client is None:
-        return jsonify({"success": False, "error": "Groq API key missing. Add GROQ_API_KEY in .env"})
+        if not med_a or not med_b:
+            return jsonify({
+                "success": False,
+                "error": "Please enter both medicine names."
+            }), 400
 
-    system_prompt = """
+        if client is None:
+            return jsonify({
+                "success": False,
+                "error": "Groq API key missing. Add GROQ_API_KEY in .env"
+            }), 500
+
+        system_prompt = """
 You are MediScan AI, an educational medicine interaction checker.
 
 Rules:
@@ -406,6 +488,7 @@ Rules:
 - No diagnosis, prescriptions, or emergency instructions.
 - If uncertain, say "unknown" or "not enough info".
 - Always recommend consulting a doctor/pharmacist.
+
 Return STRICT JSON only:
 
 {
@@ -417,7 +500,7 @@ Return STRICT JSON only:
 }
 """
 
-    user_prompt = f"""
+        user_prompt = f"""
 Check possible drug interaction between:
 
 Medicine A: {med_a}
@@ -426,7 +509,6 @@ Medicine B: {med_b}
 Return JSON only.
 """
 
-    try:
         completion = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
@@ -440,19 +522,17 @@ Return JSON only.
         text = completion.choices[0].message.content.strip()
         result = json.loads(text)
 
-        return jsonify({"success": True, "data": result})
-
-    except Exception:
         return jsonify({
             "success": True,
-            "data": {
-                "risk_level": "unknown",
-                "interaction_summary": "AI could not confidently evaluate this interaction. Try again.",
-                "what_to_avoid": [],
-                "warning_signs": [],
-                "final_note": "Educational only. Consult a doctor/pharmacist."
-            }
-        })
+            "data": result
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": "Failed to check medicine interaction.",
+            "details": str(e)
+        }), 500
 @app.route("/api/favorites/clear", methods=["POST"])
 def clear_favorites():
     save_json(FAV_PATH, [])
@@ -465,6 +545,11 @@ def report_pdf():
     Creates a PDF report for current medicine response.
     """
     data = request.get_json()
+    if not data:
+        return jsonify({
+            "success": False,
+            "error": "Invalid request body."
+        }), 400
     medicine = (data.get("medicine") or "Unknown").upper()
     source = (data.get("source") or "Unknown")
     med = data.get("data") or {}
@@ -588,7 +673,11 @@ Rules:
         return jsonify({"success": True, "answer": answer})
 
     except Exception as e:
-        return jsonify({"success": False, "error": "Groq AI error. Try again."})
+        return jsonify({
+        "success": False,
+        "error": "Groq AI error. Try again.",
+        "details": str(e)
+    }), 500
 
 @app.route("/download-report", methods=["POST"])
 def download_report():
