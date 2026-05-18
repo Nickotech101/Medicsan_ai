@@ -29,8 +29,11 @@
     <div class="card">
       <label for="medicineInput">Enter medicine name:</label>
 
-      <input list="medicineList" type="text" id="medicineInput" placeholder="Example: Paracetamol" />
-      <datalist id="medicineList"></datalist>
+      <div class="autocomplete-wrapper">
+        <input type="text" id="medicineInput" placeholder="Search medicine...">
+
+        <div id="medicineSuggestions" class="suggestions-box"></div>
+      </div>
 
       <div class="row">
         <button id="checkBtn">Check Medicine</button>
@@ -118,6 +121,10 @@
         <button id="favBtn">⭐ Add Favorite</button>
         <button id="pdfBtn">⬇️ Download PDF</button>
         <button id="shareBtn" class="secondary">📤 Share</button>
+        <!-- AI Insights PDF Export Button -->
+        <button id="exportPdfBtn" class="secondary" style="background-color: #1e3a8a; color: white;">
+          <i class="fas fa-file-download"></i> Export AI Insights PDF
+        </button>
       </div>
 
       <p class="disclaimer">
@@ -126,6 +133,92 @@
     </div>
   </div>
   
+  <script>
+   const medicineInput = document.getElementById("medicineInput");
+const suggestionsBox = document.getElementById("medicineSuggestions");
+
+let debounceTimer;
+
+medicineInput.addEventListener("input", () => {
+
+    clearTimeout(debounceTimer);
+
+    const query = medicineInput.value.trim();
+
+    if (!query) {
+        suggestionsBox.innerHTML = "";
+        suggestionsBox.style.display = "none";
+        return;
+    }
+
+    debounceTimer = setTimeout(async () => {
+
+        try {
+
+            const response = await fetch(
+                `/api/suggestions?q=${encodeURIComponent(query)}`
+            );
+
+            const data = await response.json();
+
+            suggestionsBox.innerHTML = "";
+
+            if (!data.suggestions.length) {
+                suggestionsBox.style.display = "none";
+                return;
+            }
+
+            suggestionsBox.style.display = "block";
+
+            data.suggestions.forEach((medicine) => {
+
+                const item = document.createElement("div");
+
+                item.classList.add("suggestion-item");
+
+                // Highlight matching text
+                const regex = new RegExp(`(${query})`, "gi");
+
+                item.innerHTML = `
+                    ${medicine.replace(
+                        regex,
+                        `<span class="suggestion-match">$1</span>`
+                    )}
+                `;
+
+                item.addEventListener("click", () => {
+
+                    medicineInput.value = medicine;
+
+                    suggestionsBox.innerHTML = "";
+
+                    suggestionsBox.style.display = "none";
+                });
+
+                suggestionsBox.appendChild(item);
+
+            });
+
+        } catch (error) {
+            console.error(error);
+        }
+
+    }, 50);
+
+});
+
+/* Hide dropdown when clicking outside */
+
+document.addEventListener("click", (e) => {
+
+    if (!e.target.closest(".autocomplete-wrapper")) {
+
+        suggestionsBox.style.display = "none";
+
+    }
+
+});
+  </script>
   <script src="/static/js/theme.js"></script>
   <script src="/static/js/app.js"></script>
 </body>

@@ -1,12 +1,1 @@
-[
-  {
-    "query": "toxin",
-    "source": "groq",
-    "time": "2026-01-12 22:09:09"
-  },
-  {
-    "query": "sora",
-    "source": "groq",
-    "time": "2026-01-12 19:01:10"
-  }
-]
+[]

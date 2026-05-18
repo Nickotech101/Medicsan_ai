@@ -751,3 +751,194 @@ button:disabled{
   background: var(--primaryHover);
 }
 
+/* Improved button animations */
+button {
+    transition: all 0.3s ease;
+    border-radius: 10px;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    opacity: 0.95;
+}
+
+/* better input styling */
+input {
+    border-radius: 10px;
+    padding: 12px;
+    outline: none;
+}
+/* Voice Search Styles */
+.search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.search-wrapper input {
+  padding-right: 45px; /* Prevent text from hiding under the mic icon */
+}
+
+.mic-btn {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  font-size: 1.3rem;
+  cursor: pointer;
+  transition: 0.2s;
+  box-shadow: none;
+  padding: 5px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 35px;
+  height: 35px;
+}
+
+.mic-btn:hover {
+  transform: scale(1.1);
+  box-shadow: none;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.mic-btn.listening {
+  animation: micPulse 1.5s infinite;
+  background: rgba(255, 60, 60, 0.2);
+}
+
+@keyframes micPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 60, 60, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 60, 60, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 60, 60, 0);
+  }
+}
+
+/*  mobile responsiveness */
+@media (max-width: 768px) {
+
+    .compare-grid {
+        grid-template-columns: 1fr;
+    }
+
+    h1 {
+        font-size: 28px;
+        text-align: center;
+    }
+
+    button {
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    input {
+        width: 100%;
+    }
+}
+
+
+/* Autocomplete Styles */
+.autocomplete-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+/* Main Dropdown */
+.suggestions-box {
+    background: rgba(15, 20, 35, 0.98);
+    border: 1px solid rgba(0, 212, 255, 0.18);
+    border-radius: 18px;
+    overflow: hidden;
+    z-index: 9999;
+    backdrop-filter: blur(18px);
+    box-shadow:
+        0 10px 40px rgba(0,0,0,0.45),
+        0 0 25px rgba(0,212,255,0.08);
+    padding: 10px;
+    margin: 5px 0px;
+    display: none;
+    animation: dropdownFade 0.2s ease;
+}
+
+/* Each suggestion */
+.suggestion-item {
+
+    padding: 14px 18px;
+
+    border-radius: 12px;
+
+    color: #ffffff;
+
+    font-size: 15px;
+
+    font-weight: 500;
+
+    cursor: pointer;
+
+    transition: all 0.2s ease;
+
+    margin-bottom: 4px;
+
+    border: 1px solid transparent;
+}
+
+/* Remove last spacing */
+.suggestion-item:last-child {
+    margin-bottom: 0;
+}
+
+/* Hover Effect */
+.suggestion-item:hover {
+
+    background: rgba(0, 212, 255, 0.12);
+
+    border: 1px solid rgba(0, 212, 255, 0.25);
+
+    transform: translateX(4px);
+}
+
+/* Matching text */
+.suggestion-match {
+
+    color: #00d4ff;
+
+    font-weight: 700;
+}
+
+/* Smooth animation */
+@keyframes dropdownFade {
+
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+/* div#medicineSuggestions {
+    border: 1px solid red !important;
+    border-radius: 10px;
+    padding: 10px;
+    margin: 5px;
+    background: var(--inputBg);
+    border-radius: 18px;
+    border: 1px solid var(--inputBorder);
+    outline: none;
+    background: var(--inputBg);
+    color: var(--text);
+    box-shadow: 0 10px 25px var(--shadow);
+    transition: 0.18s;
+} */
+.suggestion-item {
+    padding: 5px !important;
+}
