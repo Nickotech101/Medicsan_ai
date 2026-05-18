@@ -144,22 +144,61 @@ def dashboard_page():
     return render_template("dashboard.html")
 
 
+# @app.route("/api/suggestions", methods=["GET"])
+# def suggestions():
+#     history = load_json(HISTORY_PATH, [])
+#     favs = load_json(FAV_PATH, [])
+#     hist_names = [h["query"] for h in history if "query" in h]
+#     fav_names = [f.get("medicine", "") for f in favs if f.get("medicine")]
+
+#     db_names = list(MED_DB.keys())
+
+#     combined = []
+#     for x in (fav_names + hist_names + db_names):
+#         if x and x.lower() not in [c.lower() for c in combined]:
+#             combined.append(x)
+
+#     return jsonify({"success": True, "suggestions": combined[:40]})
 @app.route("/api/suggestions", methods=["GET"])
 def suggestions():
-    history = load_json(HISTORY_PATH, [])
-    favs = load_json(FAV_PATH, [])
-    hist_names = [h["query"] for h in history if "query" in h]
-    fav_names = [f.get("medicine", "") for f in favs if f.get("medicine")]
+    query = request.args.get("q", "").strip().lower()
 
-    db_names = list(MED_DB.keys())
+    if not query:
+        return jsonify({"suggestions": []})
 
-    combined = []
-    for x in (fav_names + hist_names + db_names):
-        if x and x.lower() not in [c.lower() for c in combined]:
-            combined.append(x)
+    matched = []
 
-    return jsonify({"success": True, "suggestions": combined[:40]})
+    # Search from local medicine database
+    for medicine_name, details in MED_DB.items():
 
+        searchable_text = " ".join([
+            medicine_name,
+            details.get("uses", ""),
+            details.get("side_effects", "")
+        ]).lower()
+
+        if query in searchable_text:
+            matched.append(medicine_name.title())
+
+    # Extra related medicines
+    related_medicines = {
+        "fever": ["Paracetamol", "Crocin", "Dolo 650", "Calpol"],
+        "cold": ["Cetirizine", "Sinarest", "Crocin Cold & Flu"],
+        "pain": ["Ibuprofen", "Combiflam", "Paracetamol"],
+        "cough": ["Benadryl", "Ascoril", "Corex"],
+        "headache": ["Saridon", "Paracetamol", "Combiflam"]
+    }
+
+    for keyword, medicines in related_medicines.items():
+        if query in keyword:
+            matched.extend(medicines)
+
+    # Remove duplicates
+    matched = list(dict.fromkeys(matched))
+
+    return jsonify({
+        "suggestions": matched[:10]
+    })
 
 @app.route("/api/history", methods=["GET"])
 def history_api():

@@ -30,7 +30,8 @@
       <label for="medicineInput">Enter medicine name:</label>
 
       <div class="search-wrapper">
-        <input list="medicineList" type="text" id="medicineInput" placeholder="Example: Paracetamol" />
+        <!-- <input list="medicineList" type="text" id="medicineInput" placeholder="Example: Paracetamol" /> -->
+        <input list="medicineList" type="text" id="medicineInput" placeholder="Example: Paracetamol">
         <button id="micBtn" class="mic-btn" type="button" aria-label="Voice Search" title="Click to speak">🎙️</button>
       </div>
       <datalist id="medicineList"></datalist>
@@ -117,6 +118,55 @@
     </div>
   </div>
   
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const medicineInput = document.getElementById("medicineInput");
+        const medicineList = document.getElementById("medicineList");
+
+        let debounceTimer;
+
+        medicineInput.addEventListener("input", function () {
+
+            clearTimeout(debounceTimer);
+
+            const query = medicineInput.value.trim();
+
+            if (!query) {
+                medicineList.innerHTML = "";
+                return;
+            }
+
+            debounceTimer = setTimeout(async () => {
+
+                try {
+
+                    const response = await fetch(
+                        `/api/suggestions?q=${encodeURIComponent(query)}`
+                    );
+
+                    const data = await response.json();
+
+                    medicineList.innerHTML = "";
+
+                    data.suggestions.forEach(function (medicine) {
+
+                        const option = document.createElement("option");
+
+                        option.value = medicine;
+
+                        medicineList.appendChild(option);
+                    });
+
+                } catch (error) {
+                    console.error("Suggestion Error:", error);
+                }
+
+            }, 300);
+
+        });
+
+    });
+  </script>
   <script src="/static/js/theme.js"></script>
   <script src="/static/js/app.js"></script>
 </body>
