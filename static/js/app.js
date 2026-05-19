@@ -424,9 +424,6 @@ clearBtn.addEventListener("click", () => {
   input.value = "";
   resultBox.classList.add("hidden");
   substitutesBox.classList.add("hidden");
-  scanBase64 = null;
-  scanPreview.classList.add("hidden");
-  scanThumb.src = "";
   setStatus("✅ Cleared.");
 });
 
