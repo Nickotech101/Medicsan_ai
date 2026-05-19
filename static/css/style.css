@@ -132,7 +132,7 @@ body::before {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 } */
-h1 {
+/* h1 {
   font-size: 2.75rem;
   font-weight: 900;
   text-align: center;
@@ -147,8 +147,25 @@ h1 {
 
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+} */
+h1 {
+  font-size: 2.75rem;
+  font-weight: 900;
+  text-align: center;
+  letter-spacing: 0.5px;
+  color: var(--text);
 }
+.gradient-text {
+  background: linear-gradient(
+    135deg,
+    #ffffff 0%,
+    #ffffff 45%,
+    #ffffff 100%
+  );
 
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
 .emoji {
   -webkit-text-fill-color: initial;
   background: none;
@@ -940,8 +957,19 @@ input {
     padding: 5px !important;
 }
 
+:root[data-theme="light"] .gradient-text {
+  background: linear-gradient(
+    135deg,
+    #111827 0%,
+    #1f2937 50%,
+    #111827 100%
+  );
+
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
 
 .dashboard-icon {
-  filter: none;
-  color: initial;
+  background: none !important;
+  -webkit-text-fill-color: initial !important;
 }
