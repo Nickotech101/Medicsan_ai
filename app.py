@@ -99,7 +99,9 @@ Return STRICT JSON only in this schema:
   "use": "...",
   "dosage": "...",
   "side_effects": ["..."],
-  "warnings": ["..."]
+  "warnings": ["..."],
+  "food_interactions": ["..."],
+  "lifestyle_interactions": ["..."]
 }
 """
 
@@ -124,7 +126,7 @@ Return JSON only.
 
     try:
         data = json.loads(text)
-        required = ["generic_name", "use", "dosage", "side_effects", "warnings"]
+        required = ["generic_name", "use", "dosage", "side_effects", "warnings", "food_interactions", "lifestyle_interactions"]
         for k in required:
             if k not in data:
                 return None, "Groq response missing fields."
@@ -224,17 +226,23 @@ def medicine_info():
     # 1) exact match
     if medicine in MED_DB:
         add_to_history(medicine, "database")
-        return jsonify({"success": True, "source": "database", "medicine": medicine, "data": MED_DB[medicine]})
+        med_data = dict(MED_DB[medicine])
+        med_data.setdefault("food_interactions", ["No specific food interactions documented. Consult a pharmacist if unsure."])
+        med_data.setdefault("lifestyle_interactions", ["No specific lifestyle restrictions documented."])
+        return jsonify({"success": True, "source": "database", "medicine": medicine, "data": med_data})
 
     # 2) partial match
     for key in MED_DB:
         if medicine in key or key in medicine:
             add_to_history(key, "database")
+            med_data = dict(MED_DB[key])
+            med_data.setdefault("food_interactions", ["No specific food interactions documented. Consult a pharmacist if unsure."])
+            med_data.setdefault("lifestyle_interactions", ["No specific lifestyle restrictions documented."])
             return jsonify({
                 "success": True,
                 "source": "database",
                 "medicine": key,
-                "data": MED_DB[key],
+                "data": med_data,
                 "note": "Closest match found in database."
             })
 
