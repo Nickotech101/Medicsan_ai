@@ -11,7 +11,10 @@
 <body>
 
   <div class="container">
-    <h1>💊 MediScan AI</h1>
+    <h1>
+      <span class="emoji">💊</span>
+      MediScan AI
+    </h1>
     <p class="subtitle">Medicine Info + Side Effects Checker (SDG 3) using Groq</p>
 
     <div class="top-links">
@@ -27,12 +30,25 @@
     <div class="card">
       <label for="medicineInput">Enter medicine name:</label>
 
-      <input list="medicineList" type="text" id="medicineInput" placeholder="Example: Paracetamol" />
-      <datalist id="medicineList"></datalist>
+      <div class="autocomplete-wrapper">
+        <input type="text" id="medicineInput" placeholder="Search medicine...">
+
+        <div id="medicineSuggestions" class="suggestions-box"></div>
+      </div>
 
       <div class="row">
         <button id="checkBtn">Check Medicine</button>
+        <button id="scanBtn" class="secondary">📷 Scan Strip</button>
         <button id="clearBtn" class="secondary">Clear</button>
+      </div>
+
+      <input type="file" id="scanFileInput" accept="image/jpeg,image/png,image/webp" class="hidden" />
+      <canvas id="scanCanvas" class="hidden"></canvas>
+
+      <div id="scanPreview" class="scan-preview hidden">
+        <img id="scanThumb" alt="Preview" />
+        <button id="scanConfirmBtn">🔍 Identify Medicine</button>
+        <button id="scanClearBtn" class="secondary small-btn">✕ Remove</button>
       </div>
 
       <div class="status-row">
@@ -90,9 +106,49 @@
         </div>
       </div>
 
+      <!-- Food & Lifestyle Alerts -->
+      <div class="alert-box">
+        <h3>‼️ Food & Lifestyle Alerts</h3>
+        <div class="alert-grid">
+          <div>
+            <h4>Food & Beverages:</h4>
+            <ul id="foodInteractions"></ul>
+          </div>
+          <div>
+            <h4>Activities & Lifestyle:</h4>
+            <ul id="lifestyleInteractions"></ul>
+          </div>
+        </div>
+
+        <!-- Special Age-Group Cautions inside the yellow box itself -->
+        <div style="margin-top: 16px; border-top: 1px solid rgba(255, 179, 64, 0.18); padding-top: 14px;">
+          <h4 style="color: #ffe0a3; margin-bottom: 8px; font-size: 0.98rem; font-weight: 700;">👶👵 Age-Group Cautions:
+          </h4>
+          <div class="alert-grid" style="margin-top: 6px;">
+            <div>
+              <strong style="color: #ffc97a; font-size: 0.9rem; font-weight: 600;">Children:</strong>
+              <p id="pediatricCaution"
+                style="color: var(--mutedText); line-height: 1.55; margin: 4px 0 0 0; font-size: 0.92rem;"></p>
+            </div>
+            <div>
+              <strong style="color: #ffc97a; font-size: 0.9rem; font-weight: 600;">Senior Citizens (Above 60
+                Years):</strong>
+              <p id="geriatricCaution"
+                style="color: var(--mutedText); line-height: 1.55; margin: 4px 0 0 0; font-size: 0.92rem;"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="ai-box">
         <h3>🤖 AI Summary</h3>
         <p id="aiSummary"></p>
+      </div>
+
+      <div class="substitutes-box hidden" id="substitutesBox">
+        <h3>💸 Affordable Generic Substitutes</h3>
+        <p class="substitutes-note">Chemically equivalent lower-cost alternatives (educational only)</p>
+        <div id="substitutesList" class="substitutes-list"></div>
       </div>
 
       <div class="actions">
@@ -100,6 +156,10 @@
         <button id="favBtn">⭐ Add Favorite</button>
         <button id="pdfBtn">⬇️ Download PDF</button>
         <button id="shareBtn" class="secondary">📤 Share</button>
+        <!-- AI Insights PDF Export Button -->
+        <button id="exportPdfBtn" class="secondary" style="background-color: #1e3a8a; color: white;">
+          <i class="fas fa-file-download"></i> Export AI Insights PDF
+        </button>
       </div>
 
       <p class="disclaimer">
@@ -107,7 +167,92 @@
       </p>
     </div>
   </div>
-  
+  <script>
+   const medicineInput = document.getElementById("medicineInput");
+const suggestionsBox = document.getElementById("medicineSuggestions");
+
+let debounceTimer;
+
+medicineInput.addEventListener("input", () => {
+
+    clearTimeout(debounceTimer);
+
+    const query = medicineInput.value.trim();
+
+    if (!query) {
+        suggestionsBox.innerHTML = "";
+        suggestionsBox.style.display = "none";
+        return;
+    }
+
+    debounceTimer = setTimeout(async () => {
+
+        try {
+
+            const response = await fetch(
+                `/api/suggestions?q=${encodeURIComponent(query)}`
+            );
+
+            const data = await response.json();
+
+            suggestionsBox.innerHTML = "";
+
+            if (!data.suggestions.length) {
+                suggestionsBox.style.display = "none";
+                return;
+            }
+
+            suggestionsBox.style.display = "block";
+
+            data.suggestions.forEach((medicine) => {
+
+                const item = document.createElement("div");
+
+                item.classList.add("suggestion-item");
+
+                // Highlight matching text
+                const regex = new RegExp(`(${query})`, "gi");
+
+                item.innerHTML = `
+                    ${medicine.replace(
+                        regex,
+                        `<span class="suggestion-match">$1</span>`
+                    )}
+                `;
+
+                item.addEventListener("click", () => {
+
+                    medicineInput.value = medicine;
+
+                    suggestionsBox.innerHTML = "";
+
+                    suggestionsBox.style.display = "none";
+                });
+
+                suggestionsBox.appendChild(item);
+
+            });
+
+        } catch (error) {
+            console.error(error);
+        }
+
+    }, 50);
+
+});
+
+/* Hide dropdown when clicking outside */
+
+document.addEventListener("click", (e) => {
+
+    if (!e.target.closest(".autocomplete-wrapper")) {
+
+        suggestionsBox.style.display = "none";
+
+    }
+
+});
+  </script>
   <script src="/static/js/theme.js"></script>
   <script src="/static/js/app.js"></script>
 </body>

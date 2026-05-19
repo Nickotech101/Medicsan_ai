@@ -13,6 +13,22 @@
       "Do not exceed maximum daily dose",
       "Avoid alcohol",
       "People with liver disease should consult doctor"
+    ],
+    "food_interactions": [
+      "Can be taken with or without food.",
+      "High-fiber meals may slightly delay absorption."
+    ],
+    "lifestyle_interactions": [
+      "Strictly avoid alcohol (increases risk of severe liver damage).",
+      "Be cautious when taking other medications containing acetaminophen."
+    ],
+    "pediatric_caution": "Safe in children when strictly dosed by body weight. Avoid adult tablet formulations.",
+    "geriatric_caution": "Safe for older adults. Monitor total daily dose closely if liver/kidney functions are reduced.",
+    "generic_substitutes": [
+      { "name": "Calpol (GSK)", "active_ingredient_match": 100 },
+      { "name": "Dolo 650 (Micro Labs)", "active_ingredient_match": 100 },
+      { "name": "Crocin (Haleon)", "active_ingredient_match": 100 },
+      { "name": "P-500 (Generic)", "active_ingredient_match": 100 }
     ]
   },
   "ibuprofen": {
@@ -30,6 +46,21 @@
       "Avoid if you have ulcers or gastric bleeding",
       "Take after food",
       "Avoid in kidney disease (doctor advice needed)"
+    ],
+    "food_interactions": [
+      "Always take with food or a glass of milk to prevent stomach upset/acidity."
+    ],
+    "lifestyle_interactions": [
+      "Avoid alcohol (increases risk of stomach bleeding and ulcers).",
+      "Ensure proper hydration, especially in warm weather or during exercise."
+    ],
+    "pediatric_caution": "Do not use under 6 months of age unless directed by a pediatrician.",
+    "geriatric_caution": "High risk of stomach bleeding and kidney strain. Use the lowest effective dose for the shortest duration.",
+    "generic_substitutes": [
+      { "name": "Brufen (Abbott)", "active_ingredient_match": 100 },
+      { "name": "Combiflam (Sanofi)", "active_ingredient_match": 85 },
+      { "name": "Ibugesic (Cipla)", "active_ingredient_match": 100 },
+      { "name": "Advil Generic (Generic)", "active_ingredient_match": 100 }
     ]
   },
   "cetirizine": {
@@ -44,6 +75,20 @@
     "warnings": [
       "Avoid driving if sleepy",
       "Consult doctor if pregnant or breastfeeding"
+    ],
+    "food_interactions": [
+      "Can be taken with or without food."
+    ],
+    "lifestyle_interactions": [
+      "Avoid alcohol (can significantly increase drowsiness and impair concentration).",
+      "Do not drive or operate machinery if you feel drowsy or dizzy."
+    ],
+    "pediatric_caution": "Safe for children over 2 years of age in liquid form. Dosing must be strictly adjusted by age.",
+    "geriatric_caution": "Increased risk of drowsiness, dry mouth, and confusion. Consider a lower dose (5mg) to start.",
+    "generic_substitutes": [
+      { "name": "Zyrtec Generic (Generic)", "active_ingredient_match": 100 },
+      { "name": "Cetzine (Sun Pharma)", "active_ingredient_match": 100 },
+      { "name": "Alerid (Cipla)", "active_ingredient_match": 100 }
     ]
   },
   "omeprazole": {
@@ -59,6 +104,21 @@
     "warnings": [
       "Do not use long-term without doctor",
       "May reduce absorption of vitamins/minerals if overused"
+    ],
+    "food_interactions": [
+      "Must take on an empty stomach, at least 30-60 minutes before breakfast for maximum effectiveness."
+    ],
+    "lifestyle_interactions": [
+      "Avoid smoking (smoking reduces the effectiveness of this acid-blocker).",
+      "Limit consumption of caffeine, carbonated drinks, and spicy foods as they trigger acidity."
+    ],
+    "pediatric_caution": "Not recommended for children under 1 year of age unless specifically prescribed by a pediatrician.",
+    "geriatric_caution": "Long-term use increases the risk of bone fractures and vitamin B12 deficiency. Monitor bone density.",
+    "generic_substitutes": [
+      { "name": "Omez (Dr. Reddy's)", "active_ingredient_match": 100 },
+      { "name": "Prilosec Generic (Generic)", "active_ingredient_match": 100 },
+      { "name": "Ocid (Cipla)", "active_ingredient_match": 100 },
+      { "name": "Omesec (Torrent)", "active_ingredient_match": 100 }
     ]
   }
 }
