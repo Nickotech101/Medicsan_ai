@@ -939,3 +939,8 @@ input {
 .suggestion-item {
     padding: 5px !important;
 }
+
+i {
+  margin-right: 8px;
+  color: #2563eb;
+}
