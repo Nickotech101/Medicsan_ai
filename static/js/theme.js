@@ -12,7 +12,38 @@
     if (btn) btn.textContent = next === "dark" ? "🌙 Dark" : "☀ Light";
   }
 
-  // attach to theme button if present
+  function setActiveNav() {
+    const path = window.location.pathname.replace(/\/+$/, "") || "/";
+    document.querySelectorAll(".nav-link").forEach((link) => {
+      const href = link.getAttribute("href");
+      if (href === path || (path === "/" && href === "/")) {
+        link.classList.add("active");
+      } else {
+        link.classList.remove("active");
+      }
+    });
+  }
+
+  function bindNavToggle() {
+    const toggle = document.getElementById("navToggle");
+    const links = document.querySelector(".navbar-links");
+    if (!toggle || !links) return;
+
+    toggle.addEventListener("click", () => {
+      const open = links.classList.toggle("open");
+      toggle.setAttribute("aria-expanded", open);
+    });
+
+    links.querySelectorAll(".nav-link").forEach((link) => {
+      link.addEventListener("click", () => {
+        if (links.classList.contains("open")) {
+          links.classList.remove("open");
+          toggle.setAttribute("aria-expanded", "false");
+        }
+      });
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     const btn = document.getElementById("themeBtn");
     if (btn) {
@@ -20,5 +51,7 @@
       btn.textContent = current === "dark" ? "🌙 Dark" : "☀ Light";
       btn.addEventListener("click", toggleTheme);
     }
+    setActiveNav();
+    bindNavToggle();
   });
 })();

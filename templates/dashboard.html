@@ -8,14 +8,38 @@
 </head>
 <body>
   <div class="container">
+    <header class="navbar">
+      <div class="navbar-inner">
+        <div class="navbar-brand">
+          <div class="navbar-logo">📊</div>
+          <div>
+            <p class="brand-title">MediScan AI</p>
+            <p class="brand-tagline">Medicine analytics</p>
+          </div>
+        </div>
+
+        <nav class="navbar-links">
+          <a class="nav-link" href="/">Home</a>
+          <a class="nav-link" href="/dashboard">Dashboard</a>
+          <a class="nav-link" href="/compare">Compare</a>
+          <a class="nav-link" href="/interaction">Interaction</a>
+          <a class="nav-link" href="/symptom">Symptom</a>
+          <a class="nav-link" href="/assistant">Assistant</a>
+        </nav>
+
+        <div class="navbar-actions">
+          <button id="themeBtn" class="nav-btn">🌙 Dark</button>
+          <button id="navToggle" class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+        </div>
+      </div>
+    </header>
+
     <h1> <span class="dashboard-icon">📊</span> <span class="gradient-text">Analytics Dashboard</span> </h1>
     <p class="subtitle">Top searched medicines (local analytics)</p>
-
-    <div class="top-links">
-      <a class="link-btn" href="/">⬅ Back to Home</a>
-      <a class="link-btn" href="/compare">⚖️ Compare</a>
-      <button id="themeBtn" class="link-btn">🌙 Theme</button>
-    </div>
 
     <div class="history-card">
       <div class="card-head">
