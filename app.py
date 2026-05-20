@@ -1,64 +1,318 @@
+from flask import Flask, render_template, request, jsonify, send_file
+import json
+import os
+from dotenv import load_dotenv
+from groq import Groq
+from datetime import datetime
+from io import BytesIO
+import threading
+import requests
+import pdfkit
+
+
+file_lock = threading.Lock()
+
+# PDF
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+# from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+
+app = Flask(__name__)
+
+# ================= ENV =================
+load_dotenv()
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+
+# ================= PATHS =================
+MED_DATA_PATH = os.path.join("data", "medicines.json")
+HISTORY_PATH = os.path.join("data", "history.json")
+FAV_PATH = os.path.join("data", "favorites.json")
+ANALYTICS_PATH = os.path.join("data", "analytics.json")
+
+
+# ================= HELPERS =================
+def load_json(path, default):
+    with file_lock:
+        if not os.path.exists(path):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(default, f, indent=2)
+            return default
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+def save_json(path, data):
+    with file_lock:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+
+MED_DB = load_json(MED_DATA_PATH, {})
+load_json(HISTORY_PATH, [])
+load_json(FAV_PATH, [])
+load_json(ANALYTICS_PATH, {})
+
+
+def add_to_history(query: str, source: str):
+    query = query.strip()[:200]
+    if not query:
+        return
+
+    history = load_json(HISTORY_PATH, [])
+    history = [h for h in history if h.get("query", "").lower() != query.lower()]
+
+    history.insert(0, {
+        "query": query,
+        "source": source,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+
+    save_json(HISTORY_PATH, history[:10])
+
+
+def update_analytics(query: str):
+    query = query.strip().lower()
+    if not query:
+        return
+    analytics = load_json(ANALYTICS_PATH, {})
+    analytics[query] = analytics.get(query, 0) + 1
+    save_json(ANALYTICS_PATH, analytics)
+
+
+def groq_medicine_lookup(medicine_name: str):
+    if client is None:
+        return None, "Groq API key missing. Add GROQ_API_KEY in .env"
+
+    system_prompt = """
+You are MediScan AI, an educational medicine information assistant.
+
+Rules:
+- Educational info only.
+- Do NOT provide diagnosis, exact prescriptions, or emergency instructions.
+- Dosage must be general, safe, and non-prescriptive.
+- Always include warnings and suggest consulting a doctor.
+- For generic_substitutes, list widely available low-cost generic equivalents with the same active ingredient. Use an empty array [] if none exist.
+
+Return STRICT JSON only in this schema:
+
+{
+  "generic_name": "...",
+  "use": "...",
+  "dosage": "...",
+  "side_effects": ["..."],
+  "warnings": ["..."],
+  "generic_substitutes": [
+    { "name": "...", "active_ingredient_match": 100 }
+  ]
+}
+"""
+
+    user_prompt = f"""
+Medicine name: {medicine_name}
+
+Generate general educational medicine info.
+Return JSON only.
+"""
+
+    completion = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "system", "content": system_prompt.strip()},
+            {"role": "user", "content": user_prompt.strip()},
+        ],
+        temperature=0.2,
+        max_tokens=700,
+    )
+
+    text = completion.choices[0].message.content.strip()
+
+    try:
+        data = json.loads(text)
+        required = ["generic_name", "use", "dosage", "side_effects", "warnings"]
+        for k in required:
+            if k not in data:
+                return None, "Groq response missing fields."
+        if "generic_substitutes" not in data:
+            data["generic_substitutes"] = []
+        return data, None
+    except Exception:
+        return None, "Groq returned invalid JSON. Try again."
+
+
+# ================= ROUTES =================
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+
+@app.route("/dashboard")
+def dashboard_page():
+    return render_template("dashboard.html")
+medicine_cache = {}
+
+POPULAR_MEDICINES = [
+    "Paracetamol",
+    "Pantoprazole",
+    "Pan D",
+    "Paracip",
+    "Dolo 650",
+    "Crocin",
+    "Calpol",
+    "Cetirizine",
+    "Sinarest",
+    "Benadryl",
+    "Ascoril",
+    "Ibuprofen",
+    "Combiflam",
+    "Omeprazole",
+    "Aspirin",
+    "Atorvastatin",
+    "Metformin",
+    "Azithromycin",
+    "Amoxicillin",
+    "Cofsils"
+]
+
+
 @app.route("/api/suggestions", methods=["GET"])
 def suggestions():
 
     query = request.args.get("q", "").strip().lower()
 
-    history = load_json(HISTORY_PATH, [])
-    favs = load_json(FAV_PATH, [])
-
-    hist_names = [h["query"] for h in history if "query" in h]
-    fav_names = [f.get("medicine", "") for f in favs if f.get("medicine")]
+    if len(query) < 1:
+        return jsonify({"suggestions": []})
 
     suggestions = []
 
+    # =========================
+    # SUPER FAST LOCAL SEARCH
+    # =========================
+
     for medicine in POPULAR_MEDICINES:
+
         if medicine.lower().startswith(query):
+
             suggestions.append(medicine)
 
+    # cache search
     for medicine in medicine_cache:
+
         if medicine.lower().startswith(query):
+
             suggestions.append(medicine)
 
-    for x in (fav_names + hist_names + list(MED_DB.keys())):
-        if x and x.lower().startswith(query):
-            suggestions.append(x)
+    # =========================
+    # FDA API SEARCH
+    # =========================
 
     try:
+
         url = (
             "https://api.fda.gov/drug/label.json?"
             f"search=openfda.brand_name:{query}*&limit=10"
         )
 
         response = requests.get(url, timeout=0.8)
+
         data = response.json()
 
         if "results" in data:
+
             for item in data["results"]:
 
                 openfda = item.get("openfda", {})
 
                 for brand in openfda.get("brand_name", []):
+
                     clean_name = brand.title()
 
                     if len(clean_name) < 40:
+
                         suggestions.append(clean_name)
+
                         medicine_cache[clean_name] = True
 
                 for generic in openfda.get("generic_name", []):
+
                     clean_name = generic.title()
 
                     if len(clean_name) < 40:
+
                         suggestions.append(clean_name)
+
                         medicine_cache[clean_name] = True
 
     except:
         pass
 
+    # remove duplicates
     suggestions = list(dict.fromkeys(suggestions))
 
     return jsonify({
         "suggestions": suggestions[:10]
     })
+
+@app.route("/api/history", methods=["GET"])
+def history_api():
+    history = load_json(HISTORY_PATH, [])
+    return jsonify({"success": True, "history": history})
+
+
+@app.route("/api/favorites", methods=["GET"])
+def favorites_api():
+    favs = load_json(FAV_PATH, [])
+    return jsonify({"success": True, "favorites": favs})
+
+
+@app.route("/api/favorites/toggle", methods=["POST"])
+def favorites_toggle():
+    data = request.get_json()
+
+    if not data:
+        return jsonify({
+            "success": False,
+            "error": "Invalid request body."
+        }), 400
+    medicine = (data.get("medicine") or "").strip().lower()
+    generic_name = (data.get("generic_name") or "").strip()
+
+    if not medicine:
+        return jsonify({"success": False, "error": "Medicine missing."})
+
+    favs = load_json(FAV_PATH, [])
+
+    existing = next((f for f in favs if f.get("medicine", "").lower() == medicine), None)
+    if existing:
+        favs = [f for f in favs if f.get("medicine", "").lower() != medicine]
+        save_json(FAV_PATH, favs)
+        return jsonify({"success": True, "favorited": False})
+
+    favs.insert(0, {
+        "medicine": medicine,
+        "generic_name": generic_name,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+    favs = favs[:20]
+    save_json(FAV_PATH, favs)
+    return jsonify({"success": True, "favorited": True})
+
+
+@app.route("/api/analytics", methods=["GET"])
+def analytics_api():
+    analytics = load_json(ANALYTICS_PATH, {})
+    # Top 10
+    top = sorted(analytics.items(), key=lambda x: x[1], reverse=True)[:10]
+    return jsonify({"success": True, "top": top, "all": analytics})
 
 
 @app.route("/api/medicine", methods=["POST"])
@@ -82,61 +336,64 @@ def medicine_info():
 
         medicine = " ".join(medicine.split())
 
+        # analytics
         update_analytics(medicine)
 
+        # exact match
         if medicine in MED_DB:
             add_to_history(medicine, "database")
-            med_data = dict(MED_DB[medicine])
-
-            med_data.setdefault(
-                "food_interactions",
-                ["No specific food interactions documented."]
-            )
-
-            med_data.setdefault(
-                "lifestyle_interactions",
-                ["No specific lifestyle restrictions documented."]
-            )
-
-            med_data.setdefault(
-                "pediatric_caution",
-                "Consult a pediatrician for safe dosing."
-            )
-
-            med_data.setdefault(
-                "geriatric_caution",
-                "Consult a doctor if unsure."
-            )
-
             return jsonify({
                 "success": True,
                 "source": "database",
                 "medicine": medicine,
-                "data": med_data
+                "data": MED_DB[medicine]
             }), 200
 
+        # partial match
         for key in MED_DB:
             if medicine in key or key in medicine:
-
                 add_to_history(key, "database")
-
-                med_data = dict(MED_DB[key])
-
                 return jsonify({
                     "success": True,
                     "source": "database",
                     "medicine": key,
-                    "data": med_data,
+                    "data": MED_DB[key],
                     "note": "Closest match found in database."
                 }), 200
 
+        # AI lookup
         ai_data, err = groq_medicine_lookup(medicine)
 
         if err:
             return jsonify({
-                "success": False,
-                "error": err
-            }), 500
+    "success": True,
+    "source": "demo",
+    "medicine": medicine,
+    "data": {
+        "generic_name": "Aspirin",
+        "use": "Pain relief, fever reduction and anti-inflammatory",
+        "dosage": "Typically 250-1000mg every 4-6 hours",
+        "side_effects": [
+            "Nausea",
+            "Dizziness",
+            "Stomach upset"
+        ],
+        "warnings": [
+            "Do not take on empty stomach",
+            "Consult doctor before use"
+        ],
+        "generic_substitutes": [
+            {
+                "name": "Aspirin Bayer",
+                "active_ingredient_match": 100
+            },
+            {
+                "name": "Aspirin Cipla",
+                "active_ingredient_match": 100
+            }
+        ]
+    }
+}), 200
 
         add_to_history(medicine, "groq")
 
@@ -154,7 +411,60 @@ def medicine_info():
             "error": "Internal server error.",
             "details": str(e)
         }), 500
+def get_medicine_data(medicine_name: str):
+    """
+    Returns: (data_dict, source, error)
+    source => "database" or "groq"
+    """
+    medicine = (medicine_name or "").strip().lower()
+    if not medicine:
+        return None, None, "Medicine name missing."
 
+    medicine = " ".join(medicine.split())
+
+    # 1) exact
+    if medicine in MED_DB:
+        return MED_DB[medicine], "database", None
+
+    # 2) partial
+    for key in MED_DB:
+        if medicine in key or key in medicine:
+            return MED_DB[key], "database", None
+
+    # 3) groq
+    ai_data, err = groq_medicine_lookup(medicine)
+    if err:
+        return None, None, err
+    return ai_data, "groq", None
+def get_medicine_data(medicine_name: str):
+    """
+    Returns: (data_dict, source, error)
+    source => "database" or "groq"
+    """
+    medicine = (medicine_name or "").strip().lower()
+    if not medicine:
+        return None, None, "Medicine name missing."
+
+    medicine = " ".join(medicine.split())
+
+    # 1) exact
+    if medicine in MED_DB:
+        return MED_DB[medicine], "database", None
+
+    # 2) partial
+    for key in MED_DB:
+        if medicine in key or key in medicine:
+            return MED_DB[key], "database", None
+
+    # 3) groq
+    ai_data, err = groq_medicine_lookup(medicine)
+    if err:
+        return None, None, err
+    return ai_data, "groq", None
+
+@app.route("/compare")
+def compare_page():
+    return render_template("compare.html")
 
 @app.route("/api/compare", methods=["POST"])
 def compare_medicines():
@@ -177,7 +487,6 @@ def compare_medicines():
             }), 400
 
         a_data, a_source, err_a = get_medicine_data(med_a)
-
         if err_a:
             return jsonify({
                 "success": False,
@@ -185,18 +494,16 @@ def compare_medicines():
             }), 500
 
         b_data, b_source, err_b = get_medicine_data(med_b)
-
         if err_b:
             return jsonify({
                 "success": False,
                 "error": f"Medicine B error: {err_b}"
             }), 500
 
+        # Groq verdict (comparison)
         verdict = None
 
-        c = get_client()
-
-        if c:
+        if client:
             system_prompt = """
 You are MediScan AI, an educational medicine comparison assistant.
 
@@ -228,7 +535,7 @@ Return JSON only.
 """
 
             try:
-                completion = c.chat.completions.create(
+                completion = client.chat.completions.create(
                     model="llama-3.1-8b-instant",
                     messages=[
                         {"role": "system", "content": system_prompt.strip()},
@@ -238,16 +545,15 @@ Return JSON only.
                     max_tokens=600,
                 )
 
-                verdict = json.loads(
-                    completion.choices[0].message.content.strip()
-                )
+                verdict_text = completion.choices[0].message.content.strip()
+                verdict = json.loads(verdict_text)
 
             except Exception:
                 verdict = {
-                    "summary": "AI verdict failed.",
+                    "summary": "AI verdict failed. Please try again.",
                     "safer_for_stomach": "depends",
                     "key_differences": [],
-                    "warning": "Consult doctor."
+                    "warning": "Consult doctor for medical decisions."
                 }
 
         return jsonify({
@@ -271,8 +577,9 @@ Return JSON only.
             "error": "Failed to compare medicines.",
             "details": str(e)
         }), 500
-
-
+@app.route("/interaction")
+def interaction_page():
+    return render_template("interaction.html")
 @app.route("/api/interaction", methods=["POST"])
 def medicine_interaction():
     try:
@@ -293,27 +600,42 @@ def medicine_interaction():
                 "error": "Please enter both medicine names."
             }), 400
 
-        c = get_client()
-
-        if c is None:
+        if client is None:
             return jsonify({
                 "success": False,
-                "error": "Groq API key missing."
+                "error": "Groq API key missing. Add GROQ_API_KEY in .env"
             }), 500
 
         system_prompt = """
 You are MediScan AI, an educational medicine interaction checker.
-Return STRICT JSON only.
+
+Rules:
+- Educational only
+- No diagnosis, prescriptions, or emergency instructions.
+- If uncertain, say "unknown" or "not enough info".
+- Always recommend consulting a doctor/pharmacist.
+
+Return STRICT JSON only:
+
+{
+  "risk_level": "low|medium|high|unknown",
+  "interaction_summary": "...",
+  "what_to_avoid": ["..."],
+  "warning_signs": ["..."],
+  "final_note": "..."
+}
 """
 
         user_prompt = f"""
-Check interaction between:
+Check possible drug interaction between:
 
 Medicine A: {med_a}
 Medicine B: {med_b}
+
+Return JSON only.
 """
 
-        completion = c.chat.completions.create(
+        completion = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
                 {"role": "system", "content": system_prompt.strip()},
@@ -337,75 +659,1001 @@ Medicine B: {med_b}
             "error": "Failed to check medicine interaction.",
             "details": str(e)
         }), 500
+@app.route("/api/favorites/clear", methods=["POST"])
+def clear_favorites():
+    save_json(FAV_PATH, [])
+    return jsonify({"success": True, "message": "Favorites cleared successfully."})
 
+# @app.route("/api/report/pdf", methods=["POST"])
+# def report_pdf():
 
-@app.route("/symptom")
-def symptom_page():
-    return render_template("symptom.html")
+#     data = request.get_json()
 
+#     if not data:
+#         return jsonify({
+#             "success": False,
+#             "error": "Invalid request body."
+#         }), 400
 
-@app.route("/api/symptom-check", methods=["POST"])
-def symptom_check():
+#     medicine = (data.get("medicine") or "Unknown").upper()
+#     source = (data.get("source") or "Unknown")
+#     med = data.get("data") or {}
+
+#     generic = med.get("generic_name", "")
+#     use = med.get("use", "")
+#     dosage = med.get("dosage", "")
+#     side_effects = med.get("side_effects", [])
+#     warnings = med.get("warnings", [])
+#     generic_substitutes = med.get("generic_substitutes", [])
+
+#     # =========================
+#     # PDF START
+#     # =========================
+
+#     buffer = BytesIO()
+
+#     doc = SimpleDocTemplate(
+#         buffer,
+#         pagesize=A4,
+#         rightMargin=20,
+#         leftMargin=20,
+#         topMargin=18,
+#         bottomMargin=18
+#     )
+
+#     styles = getSampleStyleSheet()
+#     elements = []
+
+#     # =========================
+#     # STYLES
+#     # =========================
+
+#     title_style = ParagraphStyle(
+#         'title',
+#         fontName='Helvetica-Bold',
+#         fontSize=22,
+#         leading=26,
+#         textColor=colors.white
+#     )
+
+#     subtitle_style = ParagraphStyle(
+#         'subtitle',
+#         fontName='Helvetica',
+#         fontSize=11,
+#         leading=14,
+#         textColor=colors.white
+#     )
+
+#     section_style = ParagraphStyle(
+#         'section',
+#         fontName='Helvetica-Bold',
+#         leading=20,
+#         # leading=14,
+#         textColor=colors.HexColor("#2563eb")
+#     )
+
+#     content_style = ParagraphStyle(
+#         'content',
+#         fontName='Helvetica',
+#         fontSize=10,
+#         leading=14,
+#         textColor=colors.HexColor("#111827")
+#     )
+
+#     # =========================
+#     # HEADER
+#     # =========================
+
+#     header = Table([
+#         [
+#             Paragraph(
+#                 f"""
+#                 <font size='30'><b>MediScan AI</b></font><br/>
+#                 <font size='15'>AI Medicine Analysis Report</font>
+#                 """,
+#                 title_style
+#             ),
+
+#             Paragraph(
+#                 f"""
+#                 <font size='12'>Generated</font><br/>
+#                 <font size='16'><b>{datetime.now().strftime('%d %b %Y')}</b></font><br/>
+#                 <font size='14'>{datetime.now().strftime('%H:%M:%S')}</font>
+#                 """,
+#                 subtitle_style
+#             )
+#         ]
+#     # ], colWidths=[360, 150])
+#     ], colWidths=[365, 170])
+
+#     header.setStyle(TableStyle([
+#         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#0057ff")),
+#         ('TEXTCOLOR', (0,0), (-1,-1), colors.white),
+#         ('LEFTPADDING', (0,0), (-1,-1), 28),
+#         ('RIGHTPADDING', (0,0), (-1,-1), 28),
+#         ('TOPPADDING', (0,0), (-1,-1), 14),
+#         ('BOTTOMPADDING', (0,0), (-1,-1), 14),
+#         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+#     ]))
+
+#     elements.append(header)
+#     elements.append(Spacer(1, 10))
+
+#     # =========================
+#     # MEDICINE INFO
+#     # =========================
+
+#     info = Table([
+#         [
+#             Paragraph(
+#                 f"<b>Medicine Name</b><br/><br/><font size='18'><b>{medicine}</b></font>",
+#                 content_style
+#             ),
+
+#             Paragraph(
+#                 f"<b>Generic Name</b><br/><br/><font size='18'><b>{generic}</b></font>",
+#                 content_style
+#             )
+#         ]
+#     ], colWidths=[HALF_WIDTH, HALF_WIDTH])
+
+#     info.setStyle(TableStyle([
+#         ('BACKGROUND', (0,0), (-1,-1), colors.white),
+#         ('BOX', (0,0), (-1,-1), 1.5, colors.HexColor("#bfdbfe")),
+#         ('LEFTPADDING', (0,0), (-1,-1), 24),
+#         ('RIGHTPADDING', (0,0), (-1,-1), 24),
+#         ('TOPPADDING', (0,0), (-1,-1), 16),
+#         ('BOTTOMPADDING', (0,0), (-1,-1), 16),
+#         ('TOPPADDING', (0,0), (-1,-1), 10),
+#         ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+#         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+#     ]))
+
+#     elements.append(
+#         Paragraph(
+#             """
+#             <para align='center'>
+#             <font color='#2563eb' size='13'>
+#             <b>MEDICINE INFORMATION</b>
+#             </font>
+#             </para>
+#             """,
+#             section_style
+#         )
+#     )
+
+#     elements.append(Spacer(1, 4))
+#     elements.append(info)
+#     elements.append(Spacer(1, 8))
+
+#     # =========================
+#     # USE
+#     # =========================
+
+#     use_card = Table([
+#         [
+#             Paragraph(
+#                 f"<font color='#16a34a'><b>USE</b></font><br/><br/>{use}",
+#                 content_style
+#             )
+#         ]
+#     ], colWidths=[FULL_WIDTH])
+
+#     use_card.setStyle(TableStyle([
+#         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#f0fdf4")),
+#         ('BOX', (0,0), (-1,-1), 1.2, colors.HexColor("#bbf7d0")),
+#         ('LEFTPADDING', (0,0), (-1,-1), 22),
+#         ('TOPPADDING', (0,0), (-1,-1), 10),
+#         ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+#     ]))
+
+#     elements.append(use_card)
+#     elements.append(Spacer(1, 6))
+
+#     # =========================
+#     # DOSAGE
+#     # =========================
+
+#     dosage_card = Table([
+#         [
+#             Paragraph(
+#                 f"<font color='#2563eb'><b>DOSAGE (GENERAL)</b></font><br/><br/>{dosage}",
+#                 content_style
+#             )
+#         ]
+#     ], colWidths=[FULL_WIDTH])
+
+#     dosage_card.setStyle(TableStyle([
+#         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#eff6ff")),
+#         ('BOX', (0,0), (-1,-1), 1.2, colors.HexColor("#bfdbfe")),
+#         ('LEFTPADDING', (0,0), (-1,-1), 22),
+#         ('TOPPADDING', (0,0), (-1,-1), 10),
+#         ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+#     ]))
+
+#     elements.append(dosage_card)
+#     elements.append(Spacer(1, 6))
+
+#     # =========================
+#     # SIDE EFFECTS + WARNINGS
+#     # =========================
+
+#     side_html = "<br/>".join([f"• {x}" for x in side_effects])
+#     warn_html = "<br/>".join([f"• {x}" for x in warnings])
+
+#     double_card = Table([
+#         [
+#             Paragraph(
+#                 f"<font color='#ea580c'><b>SIDE EFFECTS</b></font><br/><br/>{side_html}",
+#                 content_style
+#             ),
+
+#             Paragraph(
+#                 f"<font color='#dc2626'><b>WARNINGS</b></font><br/><br/>{warn_html}",
+#                 content_style
+#             )
+#         ]
+#     ], colWidths=[HALF_WIDTH, HALF_WIDTH])
+
+#     double_card.setStyle(TableStyle([
+#         ('BACKGROUND', (0,0), (0,0), colors.HexColor("#fff7ed")),
+#         ('BACKGROUND', (1,0), (1,0), colors.HexColor("#fef2f2")),
+#         ('BOX', (0,0), (0,0), 1.2, colors.HexColor("#fdba74")),
+#         ('BOX', (1,0), (1,0), 1.2, colors.HexColor("#fca5a5")),
+#         ('LEFTPADDING', (0,0), (-1,-1), 20),
+#         ('TOPPADDING', (0,0), (-1,-1), 10),
+#         ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+#     ]))
+
+#     elements.append(double_card)
+#     elements.append(Spacer(1, 8))
+
+#     # =========================
+#     # SUBSTITUTES
+#     # =========================
+
+#     if generic_substitutes:
+
+#         subs_html = ""
+
+#         for s in generic_substitutes:
+
+#             subs_html += f"""
+#             <b>{s.get('name')}</b>
+#             &nbsp;&nbsp;&nbsp;
+#             <font color='#7c3aed'>
+#             Match: {s.get('active_ingredient_match')}%
+#             </font><br/>
+#             """
+
+#         subs_card = Table([
+#             [
+#                 Paragraph(
+#                     f"<font color='#7c3aed'><b>AFFORDABLE GENERIC SUBSTITUTES</b></font><br/><br/>{subs_html}",
+#                     content_style
+#                 )
+#             ]
+#         ], colWidths=[FULL_WIDTH])
+
+#         subs_card.setStyle(TableStyle([
+#             ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#faf5ff")),
+#             ('BOX', (0,0), (-1,-1), 1.2, colors.HexColor("#d8b4fe")),
+#             ('LEFTPADDING', (0,0), (-1,-1), 22),
+#             ('TOPPADDING', (0,0), (-1,-1), 10),
+#             ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+#         ]))
+
+#         elements.append(subs_card)
+#         elements.append(Spacer(1, 8))
+
+#     # =========================
+#     # FOOTER
+#     # =========================
+
+#     footer = Table([
+#         [
+#             Paragraph(
+#                 """
+#                 <b>Disclaimer</b><br/>
+#                 Educational project only.<br/>
+#                 Not medical advice.<br/>
+#                 <font color='#2563eb'>
+#                 Always consult a doctor.
+#                 </font>
+#                 """,
+#                 content_style
+#             ),
+
+#             Paragraph(
+#                 """
+#                 Your health is important.<br/>
+#                 <font color='#2563eb'>
+#                 Stay safe, stay healthy.
+#                 </font>
+#                 """,
+#                 content_style
+#             )
+#         ]
+#     ], colWidths=[HALF_WIDTH, HALF_WIDTH])
+
+#     footer.setStyle(TableStyle([
+#         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#f8fafc")),
+#         ('BOX', (0,0), (-1,-1), 1.2, colors.HexColor("#bfdbfe")),
+#         ('LEFTPADDING', (0,0), (-1,-1), 22),
+#         ('TOPPADDING', (0,0), (-1,-1), 10),
+#         ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+#     ]))
+
+#     elements.append(footer)
+
+#     elements.append(Spacer(1, 4))
+
+#     elements.append(
+#         Paragraph(
+#             "<para align='center'><font color='#64748b'>© 2026 MediScan AI</font></para>",
+#             styles['BodyText']
+#         )
+#     )
+
+#     doc.build(elements)
+
+#     buffer.seek(0)
+
+#     filename = f"mediscan_report_{medicine.lower()}.pdf"
+
+#     return send_file(
+#         buffer,
+#         as_attachment=True,
+#         download_name=filename,
+#         mimetype="application/pdf"
+#     )
+
+@app.route("/api/report/pdf", methods=["POST"])
+def report_pdf():
 
     data = request.get_json()
 
-    symptoms = (data.get("symptoms") or "").strip()
-
-    if not symptoms:
+    if not data:
         return jsonify({
             "success": False,
-            "error": "Please describe your symptoms."
-        })
+            "error": "Invalid request body."
+        }), 400
 
-    c = get_client()
+    medicine = (data.get("medicine") or "Unknown").upper()
+    med = data.get("data") or {}
 
-    if c is None:
-        return jsonify({
-            "success": False,
-            "error": "Groq API key missing."
-        })
+    generic = med.get("generic_name", "")
+    use = med.get("use", "")
+    dosage = med.get("dosage", "")
+    side_effects = med.get("side_effects", [])
+    warnings = med.get("warnings", [])
+    generic_substitutes = med.get("generic_substitutes", [])
+
+    from io import BytesIO
+    from datetime import datetime
+
+    from reportlab.platypus import (
+        SimpleDocTemplate,
+        Paragraph,
+        Spacer,
+        Table,
+        TableStyle
+    )
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    # =========================
+    # PDF
+    # =========================
+
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=20,
+        leftMargin=20,
+        topMargin=18,
+        bottomMargin=18
+    )
+
+    styles = getSampleStyleSheet()
+    elements = []
+
+    FULL_WIDTH = 536
+    HALF_WIDTH = 268
+
+    # =========================
+    # STYLES
+    # =========================
+
+    title_style = ParagraphStyle(
+        'title',
+        fontName='Helvetica-Bold',
+        fontSize=22,
+        leading=26,
+        textColor=colors.white
+    )
+
+    subtitle_style = ParagraphStyle(
+        'subtitle',
+        fontName='Helvetica',
+        fontSize=11,
+        leading=14,
+        textColor=colors.white
+    )
+
+    section_style = ParagraphStyle(
+        'section',
+        fontName='Helvetica-Bold',
+        fontSize=16,
+        leading=20,
+        alignment=1,
+        textColor=colors.HexColor("#2563eb")
+    )
+
+    content_style = ParagraphStyle(
+        'content',
+        fontName='Helvetica',
+        fontSize=10,
+        leading=15,
+        textColor=colors.HexColor("#111827")
+    )
+
+    # =========================
+    # HEADER
+    # =========================
+
+    header = Table([
+        [
+            Paragraph(
+                f"""
+                <font size='30'><b>MediScan AI</b></font><br/>
+                <font size='15'>AI Medicine Analysis Report</font>
+                """,
+                title_style
+            ),
+
+            Paragraph(
+                f"""
+                <font size='12'>Generated</font><br/>
+                <font size='16'><b>{datetime.now().strftime('%d %b %Y')}</b></font><br/>
+                <font size='14'>{datetime.now().strftime('%H:%M:%S')}</font>
+                """,
+                subtitle_style
+            )
+        ]
+    ], colWidths=[365, 170])
+
+    header.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#0057ff")),
+        ('TEXTCOLOR', (0,0), (-1,-1), colors.white),
+        ('LEFTPADDING', (0,0), (-1,-1), 28),
+        ('RIGHTPADDING', (0,0), (-1,-1), 28),
+        ('TOPPADDING', (0,0), (-1,-1), 18),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 18),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+
+    elements.append(header)
+    elements.append(Spacer(1, 6))
+
+    # =========================
+    # CENTER TITLE
+    # =========================
+
+    title_table = Table([
+        [
+            Paragraph(
+                """
+                <para align='center'>
+                <font color='#2563eb' size='17'>
+                <b>MEDICINE INFORMATION</b>
+                </font>
+                </para>
+                """,
+                section_style
+            )
+        ]
+    ], colWidths=[FULL_WIDTH])
+
+    title_table.setStyle(TableStyle([
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+    ]))
+
+    elements.append(title_table)
+
+    # =========================
+    # MEDICINE INFO
+    # =========================
+
+    info = Table([
+        [
+            Paragraph(
+                f"""
+                <b>Medicine Name</b><br/><br/>
+                <font size='20'><b>{medicine}</b></font>
+                """,
+                content_style
+            ),
+
+            Paragraph(
+                f"""
+                <b>Generic Name</b><br/><br/>
+                <font size='18'><b>{generic}</b></font>
+                """,
+                content_style
+            )
+        ]
+    ], colWidths=[HALF_WIDTH, HALF_WIDTH])
+
+    info.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.white),
+        ('BOX', (0,0), (-1,-1), 1.5, colors.HexColor("#bfdbfe")),
+        ('LEFTPADDING', (0,0), (-1,-1), 24),
+        ('RIGHTPADDING', (0,0), (-1,-1), 24),
+        ('TOPPADDING', (0,0), (-1,-1), 16),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 16),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+    ]))
+
+    elements.append(info)
+    elements.append(Spacer(1, 5))
+
+    # =========================
+    # USE
+    # =========================
+
+    use_card = Table([
+        [
+            Paragraph(
+                f"""
+                <font color='#16a34a'>
+                <b>USE</b>
+                </font><br/><br/>
+                {use}
+                """,
+                content_style
+            )
+        ]
+    ], colWidths=[FULL_WIDTH])
+
+    use_card.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#f0fdf4")),
+        ('BOX', (0,0), (-1,-1), 1.2, colors.HexColor("#bbf7d0")),
+        ('LEFTPADDING', (0,0), (-1,-1), 22),
+        ('RIGHTPADDING', (0,0), (-1,-1), 22),
+        ('TOPPADDING', (0,0), (-1,-1), 14),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 14),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+    ]))
+
+    elements.append(use_card)
+    elements.append(Spacer(1, 5))
+
+    # =========================
+    # DOSAGE
+    # =========================
+
+    dosage_card = Table([
+        [
+            Paragraph(
+                f"""
+                <font color='#2563eb'>
+                <b>DOSAGE (GENERAL)</b>
+                </font><br/><br/>
+                {dosage}
+                """,
+                content_style
+            )
+        ]
+    ], colWidths=[FULL_WIDTH])
+
+    dosage_card.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#eff6ff")),
+        ('BOX', (0,0), (-1,-1), 1.2, colors.HexColor("#bfdbfe")),
+        ('LEFTPADDING', (0,0), (-1,-1), 22),
+        ('RIGHTPADDING', (0,0), (-1,-1), 22),
+        ('TOPPADDING', (0,0), (-1,-1), 14),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 14),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+    ]))
+
+    elements.append(dosage_card)
+    elements.append(Spacer(1, 5))
+
+    # =========================
+    # SIDE EFFECTS + WARNINGS
+    # =========================
+
+    side_html = "<br/>".join([f"• {x}" for x in side_effects])
+    warn_html = "<br/>".join([f"• {x}" for x in warnings])
+
+    double_card = Table([
+        [
+            Paragraph(
+                f"""
+                <font color='#ea580c'>
+                <b>SIDE EFFECTS</b>
+                </font><br/><br/>
+                {side_html}
+                """,
+                content_style
+            ),
+
+            Paragraph(
+                f"""
+                <font color='#dc2626'>
+                <b>WARNINGS</b>
+                </font><br/><br/>
+                {warn_html}
+                """,
+                content_style
+            )
+        ]
+    ], colWidths=[HALF_WIDTH, HALF_WIDTH])
+
+    double_card.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (0,0), colors.HexColor("#fff7ed")),
+        ('BACKGROUND', (1,0), (1,0), colors.HexColor("#fef2f2")),
+
+        ('BOX', (0,0), (0,0), 1.2, colors.HexColor("#fdba74")),
+        ('BOX', (1,0), (1,0), 1.2, colors.HexColor("#fca5a5")),
+
+        ('LEFTPADDING', (0,0), (-1,-1), 20),
+        ('RIGHTPADDING', (0,0), (-1,-1), 20),
+
+        ('TOPPADDING', (0,0), (-1,-1), 14),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 14),
+
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+    ]))
+
+    elements.append(double_card)
+    elements.append(Spacer(1, 5))
+
+    # =========================
+    # GENERIC SUBSTITUTES
+    # =========================
+
+    if generic_substitutes:
+
+        subs_html = ""
+
+        for s in generic_substitutes:
+
+            subs_html += f"""
+            <b>{s.get('name')}</b>
+            &nbsp;&nbsp;&nbsp;
+            <font color='#7c3aed'>
+            Match: {s.get('active_ingredient_match')}%
+            </font><br/><br/>
+            """
+
+        subs_card = Table([
+            [
+                Paragraph(
+                    f"""
+                    <font color='#7c3aed'>
+                    <b>AFFORDABLE GENERIC SUBSTITUTES</b>
+                    </font><br/><br/>
+                    {subs_html}
+                    """,
+                    content_style
+                )
+            ]
+        ], colWidths=[FULL_WIDTH])
+
+        subs_card.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#faf5ff")),
+            ('BOX', (0,0), (-1,-1), 1.2, colors.HexColor("#d8b4fe")),
+            ('LEFTPADDING', (0,0), (-1,-1), 22),
+            ('RIGHTPADDING', (0,0), (-1,-1), 22),
+            ('TOPPADDING', (0,0), (-1,-1), 14),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 14),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ]))
+
+        elements.append(subs_card)
+        elements.append(Spacer(1, 5))
+
+    # =========================
+    # FOOTER
+    # =========================
+
+    footer = Table([
+        [
+            Paragraph(
+                """
+                <b>Disclaimer</b><br/>
+                Educational project only.<br/>
+                Not medical advice.<br/>
+                <font color='#2563eb'>
+                Always consult a doctor.
+                </font>
+                """,
+                content_style
+            ),
+
+            Paragraph(
+                """
+                Your health is important.<br/>
+                <font color='#2563eb'>
+                Stay safe, stay healthy.
+                </font>
+                """,
+                content_style
+            )
+        ]
+    ], colWidths=[HALF_WIDTH, HALF_WIDTH])
+
+    footer.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#f8fafc")),
+        ('BOX', (0,0), (-1,-1), 1.2, colors.HexColor("#bfdbfe")),
+        ('LEFTPADDING', (0,0), (-1,-1), 22),
+        ('RIGHTPADDING', (0,0), (-1,-1), 22),
+        ('TOPPADDING', (0,0), (-1,-1), 12),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 12),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+    ]))
+
+    elements.append(footer)
+
+    elements.append(Spacer(1, 4))
+
+    elements.append(
+        Paragraph(
+            """
+            <para align='center'>
+            <font color='#64748b'>
+            © 2026 MediScan AI
+            </font>
+            </para>
+            """,
+            styles['BodyText']
+        )
+    )
+
+    # =========================
+    # BUILD PDF
+    # =========================
+
+    doc.build(elements)
+
+    buffer.seek(0)
+
+    filename = f"mediscan_report_{medicine.lower()}.pdf"
+
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/pdf"
+    )
+
+@app.route("/api/history/clear", methods=["POST"])
+def clear_history():
+    # Clear history
+    save_json(HISTORY_PATH, [])
+    return jsonify({"success": True, "message": "History cleared successfully."})
+@app.route("/api/analytics/clear", methods=["POST"])
+def clear_analytics():
+    save_json(ANALYTICS_PATH, {})
+    return jsonify({"success": True, "message": "Analytics cleared successfully."})
+@app.route("/api/scan-medicine", methods=["POST"])
+def scan_medicine():
+    if client is None:
+        return jsonify({"success": False, "error": "Groq API key missing. Add GROQ_API_KEY in .env"})
+
+    data = request.get_json()
+    image_b64 = (data.get("image") or "").strip()
+    if not image_b64:
+        return jsonify({"success": False, "error": "No image provided."})
+
+    # strip data-url prefix if present
+    if "," in image_b64:
+        image_b64 = image_b64.split(",", 1)[1]
 
     system_prompt = """
-You are MediScan AI, an educational symptom analysis assistant.
+You are MediScan AI OCR. Extract the primary generic active ingredient name from the medicine strip or prescription image.
+
+Rules:
+- Return ONLY the main active ingredient / generic medicine name.
+- Ignore batch numbers, expiry dates, manufacturer addresses, dosage numbers, and brand names.
+- If the image is unreadable or unclear, set extracted_medicine_name to null.
 
 Return STRICT JSON only:
-
 {
-  "possible_conditions": [],
-  "suggested_medicines": [],
-  "home_remedies": [],
-  "warning": ""
+  "extracted_medicine_name": "...",
+  "confidence": "High|Medium|Low",
+  "note": "..."
 }
 """
 
-    user_prompt = f"""
-Patient symptoms: {symptoms}
-
-Return JSON only.
-"""
-
     try:
-        completion = c.chat.completions.create(
-            model="llama-3.1-8b-instant",
+        completion = client.chat.completions.create(
+            model="llama-3.2-11b-vision-preview",
             messages=[
                 {"role": "system", "content": system_prompt.strip()},
-                {"role": "user", "content": user_prompt.strip()},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Extract the medicine name from this image. Return JSON only."},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
+                    ],
+                },
             ],
-            temperature=0.4,
-            max_tokens=900,
+            temperature=0.1,
+            max_tokens=200,
         )
 
-        text = completion.choices[0].message.content.strip()
+        ocr_text = completion.choices[0].message.content.strip()
+        ocr_json = json.loads(ocr_text)
+        extracted = (ocr_json.get("extracted_medicine_name") or "").strip()
 
-        result = json.loads(text)
+        if not extracted:
+            return jsonify({"success": False, "error": "Image unclear. Please capture a well-lit photo of the medicine strip text."})
+
+        med_data, source, err = get_medicine_data(extracted)
+        if err:
+            return jsonify({"success": False, "error": err})
+
+        update_analytics(extracted.lower())
+        add_to_history(extracted, "ocr-" + source)
 
         return jsonify({
             "success": True,
-            "data": result
+            "source": source,
+            "medicine": extracted.lower(),
+            "data": med_data,
+            "note": f"Scanned via OCR (confidence: {ocr_json.get('confidence', '?')}). AI-generated info (educational only)."
         })
 
+    except (json.JSONDecodeError, KeyError):
+        return jsonify({"success": False, "error": "Image unclear. Please capture a well-lit photo of the medicine strip text."})
     except Exception:
+        return jsonify({"success": False, "error": "OCR scan failed. Try again."})
+
+
+@app.route("/assistant")
+def assistant_page():
+    return render_template("assistant.html")
+@app.route("/api/assistant", methods=["POST"])
+def assistant_api():
+    data = request.get_json() or {}
+    query = (data.get("query") or "").strip()[:500]
+
+    if not query:
+        return jsonify({"success": False, "error": "Empty query."})
+
+    if client is None:
+        return jsonify({"success": False, "error": "Groq API key missing. Add GROQ_API_KEY in .env"})
+
+    system_prompt = """
+You are MediScan AI Assistant.
+
+Rules:
+- Be helpful and friendly.
+- Educational health information only.
+- Do NOT diagnose disease.
+- Do NOT provide prescriptions or exact dosages for specific people.
+- If user asks serious/urgent symptoms, advise to consult doctor/emergency services.
+- Keep answers simple and structured with bullet points when useful.
+"""
+
+    try:
+        completion = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": system_prompt.strip()},
+                {"role": "user", "content": query},
+            ],
+            temperature=0.3,
+            max_tokens=700
+        )
+
+        answer = completion.choices[0].message.content.strip()
+        return jsonify({"success": True, "answer": answer})
+
+    except Exception as e:
         return jsonify({
-            "success": False,
-            "error": "AI error. Please try again."
-        })
+        "success": False,
+        "error": "Groq AI error. Try again.",
+        "details": str(e)
+    }), 500
+
+@app.route("/download-report", methods=["POST"])
+def download_report():
+    data = request.get_json() or {}
+    symptoms = data.get("symptoms", "")
+    extracted_text = data.get("extracted_text", "")
+    ai_insights = data.get("ai_insights", "")
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=A4,
+        rightMargin=50, leftMargin=50,
+        topMargin=50, bottomMargin=50
+    )
+
+    styles = getSampleStyleSheet()
+    
+    # Custom Styles
+    header_style = ParagraphStyle(
+        name='HeaderStyle',
+        parent=styles['Heading1'],
+        textColor=colors.HexColor('#1e3a8a'),
+        spaceAfter=14
+    )
+    
+    subhead_style = ParagraphStyle(
+        name='SubheadStyle',
+        parent=styles['Heading2'],
+        textColor=colors.HexColor('#0d9488'),
+        spaceAfter=10,
+        spaceBefore=14
+    )
+    
+    body_style = ParagraphStyle(
+        name='BodyStyle',
+        parent=styles['Normal'],
+        textColor=colors.HexColor('#374151'),
+        fontSize=11,
+        leading=15,
+        spaceAfter=10
+    )
+    
+    disclaimer_style = ParagraphStyle(
+        name='DisclaimerStyle',
+        parent=styles['Italic'],
+        textColor=colors.HexColor('#6b7280'),
+        fontSize=9,
+        alignment=1,
+        spaceBefore=30
+    )
+
+    elements = []
+
+    # Title
+    elements.append(Paragraph("MediScan AI Health Report", header_style))
+    elements.append(Spacer(1, 4))
+
+    def format_text(text):
+        if not text:
+            return "N/A"
+        return str(text).replace('\n', '<br/>')
+
+    # Symptoms
+    elements.append(Paragraph("Patient Symptoms", subhead_style))
+    elements.append(Paragraph(format_text(symptoms), body_style))
+
+    # Extracted Text
+    elements.append(Paragraph("Extracted Text (Medical Reports)", subhead_style))
+    elements.append(Paragraph(format_text(extracted_text), body_style))
+
+    # AI Insights
+    elements.append(Paragraph("AI Health Insights", subhead_style))
+    elements.append(Paragraph(format_text(ai_insights), body_style))
+
+    # Disclaimer
+    elements.append(Spacer(1, 8))
+    disclaimer_text = "Disclaimer: This project is for educational and research purposes only and does not replace professional medical advice."
+    elements.append(Paragraph(disclaimer_text, disclaimer_style))
+
+    doc.build(elements)
+    
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name="Medicsan_AI_Health_Report.pdf",
+        mimetype="application/pdf"
+    )
+
+if __name__ == "__main__":
+    app.run(debug=True)
