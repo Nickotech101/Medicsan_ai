@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MediScan AI - Symptom Checker</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>🩺 Symptom Checker</h1>
+    <p class="subtitle">Describe your symptoms — AI suggests possible conditions & medicines (Educational only)</p>
+
+    <div class="top-links">
+      <a class="link-btn" href="/">🏠 Home</a>
+      <a class="link-btn" href="/compare">⚖️ Compare</a>
+      <a class="link-btn" href="/interaction">🧪 Interaction</a>
+      <a class="link-btn" href="/assistant">🤖 Assistant</a>
+      <button id="themeBtn" class="link-btn">🌙 Theme</button>
+    </div>
+
+    <div class="card">
+      <label for="symptomInput">Describe your symptoms:</label>
+      <input
+        type="text"
+        id="symptomInput"
+        placeholder="e.g. headache, fever, body ache, sore throat"
+      />
+      <div class="row">
+        <button id="checkBtn">Analyse Symptoms</button>
+        <button id="clearBtn" class="secondary">Clear</button>
+      </div>
+      <div class="status-row">
+        <div id="loader" class="loader hidden"></div>
+        <p id="status"></p>
+      </div>
+    </div>
+
+    <div id="result" class="result hidden">
+
+      <div class="grid">
+        <div class="box">
+          <h3>🔍 Possible Conditions</h3>
+          <ul id="conditionsList"></ul>
+        </div>
+
+        <div class="box">
+          <h3>🏠 Home Remedies</h3>
+          <ul id="remediesList"></ul>
+        </div>
+      </div>
+
+      <div class="history-card" style="margin-top:14px;">
+        <h3 style="margin-bottom:12px;">💊 Suggested Medicines</h3>
+        <div id="medicinesList"></div>
+      </div>
+
+      <div class="ai-box" style="margin-top:14px;">
+        <h3>⚠️ Warning</h3>
+        <p id="warningText"></p>
+      </div>
+
+      <p class="disclaimer">
+        ⚠️ Disclaimer: Educational project only. Not medical advice. Always consult a doctor.
+      </p>
+    </div>
+  </div>
+
+  <script src="/static/js/theme.js"></script>
+  <script>
+    const input   = document.getElementById("symptomInput");
+    const checkBtn = document.getElementById("checkBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const loader  = document.getElementById("loader");
+    const status  = document.getElementById("status");
+    const result  = document.getElementById("result");
+
+    function setStatus(msg, ok = true) {
+      status.textContent = msg;
+      status.style.color = ok ? "#9fffa8" : "#ff9f9f";
+    }
+
+    function setLoading(val) {
+      loader.classList.toggle("hidden", !val);
+      checkBtn.disabled = val;
+    }
+
+    checkBtn.addEventListener("click", async () => {
+      const symptoms = input.value.trim();
+      if (!symptoms) { setStatus("❌ Please enter your symptoms.", false); return; }
+
+      setLoading(true);
+      setStatus("⏳ Analysing symptoms...");
+      result.classList.add("hidden");
+
+      try {
+        const res  = await fetch("/api/symptom-check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symptoms })
+        });
+        const json = await res.json();
+
+        if (!json.success) { setStatus("❌ " + json.error, false); setLoading(false); return; }
+
+        const d = json.data;
+
+        // Conditions
+        const condList = document.getElementById("conditionsList");
+        condList.innerHTML = d.possible_conditions.map(c => `<li>${c}</li>`).join("") || "<li>None identified</li>";
+
+        // Remedies
+        const remList = document.getElementById("remediesList");
+        remList.innerHTML = d.home_remedies.map(r => `<li>${r}</li>`).join("") || "<li>None available</li>";
+
+        // Medicines
+        const medList = document.getElementById("medicinesList");
+        medList.innerHTML = d.suggested_medicines.length
+          ? d.suggested_medicines.map(m => `
+              <div class="analytics-row">
+                <b>💊 ${m.name}</b>
+                <span>${m.reason}</span>
+              </div>`).join("")
+          : `<div class="analytics-row">No specific medicines suggested.</div>`;
+
+        // Warning
+        document.getElementById("warningText").textContent = d.warning || "Always consult a doctor.";
+
+        result.classList.remove("hidden");
+        setStatus("✅ Analysis complete.");
+      } catch (e) {
+        setStatus("❌ Server error. Try again.", false);
+      }
+
+      setLoading(false);
+    });
+
+    clearBtn.addEventListener("click", () => {
+      input.value = "";
+      result.classList.add("hidden");
+      setStatus("");
+    });
+
+    input.addEventListener("keydown", e => { if (e.key === "Enter") checkBtn.click(); });
+  </script>
+</body>
+</html>
