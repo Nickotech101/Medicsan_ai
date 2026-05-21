@@ -384,7 +384,10 @@ input.addEventListener("keydown", (e) => {
 clearBtn.addEventListener("click", () => {
   input.value = "";
   resultBox.classList.add("hidden");
-  setStatus("✅ Cleared.");
+  setStatus("✅ Cleared");
+    setTimeout(() => {
+    setStatus(""); // ← dismiss the message after 2.5s
+  }, 1500);
 });
 
 // ✅ Clear History (NO alert/confirm)
