@@ -8,3 +8,5 @@ pdfkit
 Flask-SQLAlchemy==3.1.1
 Flask-Login==0.6.3
 PyPDF2==3.0.1
+pytest
+pytest-mock

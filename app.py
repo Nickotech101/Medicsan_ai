@@ -106,7 +106,7 @@ def add_to_history(query: str, source: str):
     if not query or not current_user.is_authenticated:
         return
 
-    existing = History.query.filter_by(user_id=current_user.id, query=query).first()
+    existing = db.session.query(History).filter_by(user_id=current_user.id, query=query).first()
     if existing:
         db.session.delete(existing)
         db.session.commit()
@@ -121,7 +121,7 @@ def add_to_history(query: str, source: str):
     db.session.commit()
     
     # Keep only top 10
-    user_hist = History.query.filter_by(user_id=current_user.id).order_by(History.id.desc()).all()
+    user_hist = db.session.query(History).filter_by(user_id=current_user.id).order_by(History.id.desc()).all()
     if len(user_hist) > 10:
         for h in user_hist[10:]:
             db.session.delete(h)
@@ -132,7 +132,7 @@ def update_analytics(query: str):
     query = query.strip().lower()
     if not query or not current_user.is_authenticated:
         return
-    stat = Analytics.query.filter_by(user_id=current_user.id, query=query).first()
+    stat = db.session.query(Analytics).filter_by(user_id=current_user.id, query=query).first()
     if stat:
         stat.count += 1
     else:
@@ -358,7 +358,7 @@ def suggestions():
 @app.route("/api/history", methods=["GET"])
 @login_required
 def history_api():
-    history_items = History.query.filter_by(user_id=current_user.id).order_by(History.id.desc()).all()
+    history_items = db.session.query(History).filter_by(user_id=current_user.id).order_by(History.id.desc()).all()
     history = [{"query": h.query, "source": h.source, "time": h.time} for h in history_items]
     return jsonify({"success": True, "history": history})
 
@@ -414,7 +414,7 @@ def favorites_toggle():
 @app.route("/api/analytics", methods=["GET"])
 @login_required
 def analytics_api():
-    stats = Analytics.query.filter_by(user_id=current_user.id).all()
+    stats = db.session.query(Analytics).filter_by(user_id=current_user.id).all()
     analytics_dict = {s.query: s.count for s in stats}
     top = sorted(analytics_dict.items(), key=lambda x: x[1], reverse=True)[:10]
     return jsonify({"success": True, "top": top, "all": analytics_dict})
@@ -1545,13 +1545,13 @@ def report_pdf():
 @app.route("/api/history/clear", methods=["POST"])
 @login_required
 def clear_history():
-    History.query.filter_by(user_id=current_user.id).delete()
+    db.session.query(History).filter_by(user_id=current_user.id).delete()
     db.session.commit()
     return jsonify({"success": True, "message": "History cleared successfully."})
 @app.route("/api/analytics/clear", methods=["POST"])
 @login_required
 def clear_analytics():
-    Analytics.query.filter_by(user_id=current_user.id).delete()
+    db.session.query(Analytics).filter_by(user_id=current_user.id).delete()
     db.session.commit()
     return jsonify({"success": True, "message": "Analytics cleared successfully."})
 @app.route("/api/scan-medicine", methods=["POST"])
