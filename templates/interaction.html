@@ -11,24 +11,24 @@
     <header class="navbar">
       <div class="navbar-inner">
         <div class="navbar-brand">
-          <div class="navbar-logo">🧪</div>
+          <div class="navbar-logo" aria-hidden="true">🧪</div>
           <div>
             <p class="brand-title">MediScan AI</p>
             <p class="brand-tagline">Interaction checker</p>
           </div>
         </div>
 
-        <nav class="navbar-links">
+        <nav class="navbar-links" aria-label="Main Navigation">
           <a class="nav-link" href="/">Home</a>
           <a class="nav-link" href="/dashboard">Dashboard</a>
           <a class="nav-link" href="/compare">Compare</a>
-          <a class="nav-link" href="/interaction">Interaction</a>
+          <a class="nav-link" href="/interaction" aria-current="page">Interaction</a>
           <a class="nav-link" href="/symptom">Symptom</a>
           <a class="nav-link" href="/assistant">Assistant</a>
         </nav>
 
         <div class="navbar-actions">
-          <button id="themeBtn" class="nav-btn">🌙 Dark</button>
+          <button id="themeBtn" class="nav-btn" aria-label="Switch to Dark Mode">🌙 Dark</button>
           <button id="navToggle" class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
             <span></span>
             <span></span>
@@ -38,56 +38,61 @@
       </div>
     </header>
 
-    <h1> <span class="dashboard-icon">🧪</span> <span class="gradient-text">Interaction Checker</span> </h1>
-    <p class="subtitle">Check possible medicine interactions using Groq AI (Educational)</p>
+    <main>
+      <h1> 
+        <span class="dashboard-icon" aria-hidden="true">🧪</span> 
+        <span class="gradient-text">Interaction Checker</span> 
+      </h1>
+      <p class="subtitle">Check possible medicine interactions using Groq AI (Educational)</p>
 
-    <div class="card">
-      <label>Enter 2 medicines:</label>
+      <div class="card">
+        <label for="medicineA">Enter 2 medicines:</label>
 
-      <div class="compare-grid">
-        <input id="medicineA" placeholder="Medicine A (ex: Ibuprofen)" />
-        <input id="medicineB" placeholder="Medicine B (ex: Warfarin)" />
-      </div>
-
-      <button id="checkInteractionBtn">Check Interaction</button>
-
-      <div class="status-row">
-        <div id="loader" class="loader hidden"></div>
-        <p id="status"></p>
-      </div>
-    </div>
-
-    <div id="result" class="result hidden">
-      <div class="history-card">
-        <div class="result-head">
-          <h2>📌 Interaction Result</h2>
-          <span id="riskBadge" class="badge">Risk</span>
+        <div class="compare-grid">
+          <input id="medicineA" placeholder="Medicine A (ex: Ibuprofen)" aria-label="Medicine A" />
+          <input id="medicineB" placeholder="Medicine B (ex: Warfarin)" aria-label="Medicine B" />
         </div>
 
-        <p id="summary" style="margin-top:12px;"></p>
+        <button id="checkInteractionBtn">Check Interaction</button>
 
-        <div class="grid" style="margin-top: 14px;">
-          <div class="box">
-            <h3>🚫 What to Avoid</h3>
-            <ul id="avoidList"></ul>
+        <div class="status-row">
+          <div id="loader" class="loader hidden" aria-live="polite"></div>
+          <p id="status" aria-live="polite"></p>
+        </div>
+      </div>
+
+      <div id="result" class="result hidden" aria-live="polite">
+        <div class="history-card">
+          <div class="result-head">
+            <h2><span aria-hidden="true">📌</span> Interaction Result</h2>
+            <span id="riskBadge" class="badge">Risk</span>
           </div>
 
-          <div class="box">
-            <h3>⚠️ Warning Signs</h3>
-            <ul id="signsList"></ul>
+          <p id="summary" style="margin-top:12px;"></p>
+
+          <div class="grid" style="margin-top: 14px;">
+            <div class="box">
+              <h3><span aria-hidden="true">🚫</span> What to Avoid</h3>
+              <ul id="avoidList"></ul>
+            </div>
+
+            <div class="box">
+              <h3><span aria-hidden="true">⚠️</span> Warning Signs</h3>
+              <ul id="signsList"></ul>
+            </div>
           </div>
-        </div>
 
-        <div class="ai-box" style="margin-top: 14px;">
-          <h3>✅ Final Note</h3>
-          <p id="finalNote"></p>
-        </div>
+          <div class="ai-box" style="margin-top: 14px;">
+            <h3><span aria-hidden="true">✅</span> Final Note</h3>
+            <p id="finalNote"></p>
+          </div>
 
-        <p class="disclaimer">
-          ⚠️ Educational only. Consult a doctor/pharmacist for safe decisions.
-        </p>
+          <p class="disclaimer">
+            <span class="sr-only">Warning:</span><span aria-hidden="true">⚠️</span> Educational only. Consult a doctor/pharmacist for safe decisions.
+          </p>
+        </div>
       </div>
-    </div>
+    </main>
   </div>
 
   <script src="/static/js/theme.js"></script>
@@ -201,7 +206,7 @@
         setLoading(false);
       }
     });
-    
+
   </script>
 </body>
 </html>
