@@ -94,25 +94,25 @@ http://127.0.0.1:5000
 
 ## Project structure
 
+## Project structure
+
 ```text
-Medicsan_ai repo/
+Medicsan_ai/
 ├── .github/
-│   └── workflows/
 ├── data/
-├── instance/
 ├── static/
 ├── templates/
 ├── tests/
 ├── venv/
 ├── .gitignore
-├── app.py
 ├── CONTRIBUTING.md
-├── init_db.py
 ├── LICENSE
+├── README.md
+├── app.py
+├── init_db.py
 ├── package-lock.json
 ├── pyproject.toml
 ├── pytest.ini
-├── README.md
 └── requirements.txt
 ```
 
