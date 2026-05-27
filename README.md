@@ -1,6 +1,24 @@
 # Medicsan AI
 
-AI-powered healthcare assistant platform that helps users analyze symptoms and medical reports using AI.
+AI-powered healthcare assistant for comparing medicines and summarizing medical reports.
+For research and educational use only — not medical advice.
+
+---
+
+## Table of contents
+
+- [Features](#features)
+- [Tech stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Setup (Windows / Linux / macOS)](#setup-windows--linux--macos)
+  - [Windows (PowerShell)](#windows-powershell)
+  - [Windows (cmd)](#windows-cmd)
+  - [Linux / macOS (bash)](#linux--macos-bash)
+- [Run locally](#run-locally)
+- [Project structure](#project-structure)
+- [Contributing](#contributing)
+- [License](#license)
+- [Contact](#contact)
 
 ---
 
@@ -11,8 +29,7 @@ AI-powered healthcare assistant platform that helps users analyze symptoms and m
 - User-friendly interface
 - Flask backend
 - Responsive UI
-
----
+- Auto Generated PDF Reports
 
 ## Tech Stack
 
@@ -22,77 +39,91 @@ AI-powered healthcare assistant platform that helps users analyze symptoms and m
 - JavaScript
 - AI/ML
 
----
+## Prerequisites
 
-## Run Locally
+- Python 3.12+
+- Git
+- A virtual environment is recommended
 
-### 1. Clone Repository
+## Setup (Windows / Linux / macOS)
 
-```bash
+Clone the repository:
+
+```powershell
 git clone https://github.com/Ranjit1401/Medicsan_ai.git
-```
-
-### 2. Move Into Project Folder
-
-```bash
 cd Medicsan_ai
 ```
 
-### 3. Create Virtual Environment
+### Windows (PowerShell)
 
-```bash
+```powershell
 python -m venv venv
-```
-
-### 4. Activate Virtual Environment
-
-### Windows
-```bash
-venv\Scripts\activate
-```
-
-### Mac/Linux
-```bash
-source venv/bin/activate
-```
-
-### 5. Install Dependencies
-
-```bash
+venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-### 6. Run Application
+### Windows (cmd)
+
+```cmd
+python -m venv venv
+venv\Scripts\activate.bat
+pip install -r requirements.txt
+```
+
+### Linux / macOS (bash)
 
 ```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Run locally
+
+Start the application with:
+
+```powershell
 python app.py
 ```
 
-### 7. Open in Browser
+Open in your browser:
 
 ```text
 http://127.0.0.1:5000
 ```
 
----
+## Project structure
 
-## Project Structure
+## Project structure
 
 ```text
-static/      -> CSS, JS, Images
-templates/   -> HTML templates
-data/        -> ML data files
-app.py       -> Main Flask application
+Medicsan_ai/
+├── .github/
+├── data/
+├── static/
+├── templates/
+├── tests/
+├── venv/
+├── .gitignore
+├── CONTRIBUTING.md
+├── LICENSE
+├── README.md
+├── app.py
+├── init_db.py
+├── package-lock.json
+├── pyproject.toml
+├── pytest.ini
+└── requirements.txt
 ```
 
----
+## Contributing
 
-## Contribution Guidelines
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution guidelines.
 
-Please read CONTRIBUTING.md before contributing.
+## License
 
----
+MIT — see `LICENSE` for details.
 
-## Disclaimer
+## Contact
 
-This project is for educational and research purposes only and does not replace professional medical advice.
+Project maintainer: [@Ranjit1401](https://github.com/Ranjit1401)

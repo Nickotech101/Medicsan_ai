@@ -32,7 +32,14 @@ Work on your assigned issue.
 
 ---
 
-### 5. Commit Changes
+### 5. Lint Code and Format
+```bash
+ruff format
+ruff check --fix
+```
+
+---
+### 6. Commit Changes
 
 ```bash
 git add .
@@ -41,7 +48,7 @@ git commit -m "Added new feature"
 
 ---
 
-### 6. Push Changes
+### 7. Push Changes
 
 ```bash
 git push origin feature-name
@@ -49,7 +56,7 @@ git push origin feature-name
 
 ---
 
-### 7. Create Pull Request
+### 8. Create Pull Request
 
 Submit PR with proper description.
 

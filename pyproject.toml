@@ -1,0 +1,47 @@
+[project]
+name = "Medicsan ai"
+description = "AI-powered healthcare assistant platform that helps users analyze symptoms and medical reports using AI."
+readme = "README.md"
+license = { text = "MIT" }
+keywords = ["medical", "healthcare", "ai", "medical reports"]
+requires-python = ">=3.12"
+dynamic = ["dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/Ranjit1401/Medicsan_ai"
+Documentation = "https://github.com/Ranjit1401/Medicsan_ai/blob/main/README.md"
+Issues = "https://github.com/Ranjit1401/Medicsan_ai/issues"
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "*.md"
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+docstring-code-format = true
+docstring-code-line-length = 72
+
+[tool.ruff.lint]
+select = ["E", "I"]
+ignore = ["E501", "E402"]
+fixable = ["ALL"]
+explicit-preview-rules = true
+
+[tool.ruff.lint.isort]
+force-single-line = false
+lines-after-imports = 2
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

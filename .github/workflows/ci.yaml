@@ -1,0 +1,56 @@
+name: medicsan-ai CI workflow
+
+on:
+    push:
+        branches: [ main ]
+    pull_request:
+        branches: [ main ]
+    workflow_dispatch:
+
+jobs:
+    code-linting-formatting:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v5
+              with:
+                  fetch-depth: 0
+
+            - name: Set up Python
+              uses: actions/setup-python@v4
+              with:
+                  python-version: '3.12'
+                  cache: 'pip'
+
+            - name: Upgrade pip
+              run: python -m pip install --upgrade pip
+
+            - name: Install project dependencies
+              run: pip install -r requirements.txt
+
+            - name: Run ruff (lint)
+              run: ruff check --fix .
+
+            - name: Run ruff (formatting check)
+              run: ruff format --check .
+
+            - name: Run pytest
+              run: pytest -v
+
+    test-matrix:
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                python-version: ['3.10', '3.11']
+        steps:
+            - uses: actions/checkout@v5
+            - name: Set up Python ${{ matrix.python-version }}
+              uses: actions/setup-python@v4
+              with:
+                  python-version: ${{ matrix.python-version }}
+            - name: Install dependencies
+              run: |
+                  pip install --upgrade pip
+                  pip install -r requirements.txt
+            - name: Run tests
+              run: pytest -v
