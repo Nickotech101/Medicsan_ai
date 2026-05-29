@@ -32,7 +32,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 file_lock = threading.Lock()
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "supersecretkey123"
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY") or os.urandom(32).hex()
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///medicsan.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
