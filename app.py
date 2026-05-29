@@ -4,9 +4,6 @@ import threading
 from collections import OrderedDict
 from datetime import datetime
 from io import BytesIO
-from flask import session
-app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-production")
 import requests
 from dotenv import load_dotenv
 from flask import Flask, flash, jsonify, redirect, render_template, request, send_file, url_for
@@ -22,6 +19,18 @@ from flask_login import (
 )
 from flask_sqlalchemy import SQLAlchemy
 from groq import Groq
+from flask import (
+    Flask,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    session,
+    url_for,
+)
+
 from reportlab.lib import colors
 
 # PDF
@@ -34,23 +43,25 @@ from werkzeug.security import check_password_hash, generate_password_hash
 file_lock = threading.Lock()
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY") or os.urandom(32).hex()
+
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY") or "change-me-in-production"
+
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///medicsan.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
+
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
+
 
 @login_manager.unauthorized_handler
 def unauthorized():
     if request.path.startswith("/api/"):
-        return jsonify({
-            "success": False,
-            "error": "Authentication required"
-        }), 401
+        return jsonify({"success": False, "error": "Authentication required"}), 401
 
     return redirect(url_for("login"))
+
 
 # Rate limiter -- keyed per remote IP, stored in process memory.
 # Disable in tests by setting RATELIMIT_ENABLED = False in the app config.
@@ -1902,23 +1913,20 @@ Return JSON ONLY:
     except Exception as e:
         return jsonify({"success": False, "error": f"Error processing file: {str(e)}"}), 500
 
+
 @app.errorhandler(404)
 def handle_api_404(e):
     if request.path.startswith("/api/"):
-        return jsonify({
-            "status": "error",
-            "message": f"API endpoint not found: {request.path}"
-        }), 404
+        return jsonify(
+            {"status": "error", "message": f"API endpoint not found: {request.path}"}
+        ), 404
     return e
 
 
 @app.errorhandler(500)
 def handle_api_500(e):
     if request.path.startswith("/api/"):
-        return jsonify({
-            "status": "error",
-            "message": "Internal server error."
-        }), 500
+        return jsonify({"status": "error", "message": "Internal server error."}), 500
     return e
 
 
