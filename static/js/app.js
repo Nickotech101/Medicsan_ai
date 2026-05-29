@@ -1,7 +1,17 @@
 // ============================
 // MediScan AI - app.js (FULL)
 // ============================
+async function safeApiFetch(url, options = {}) {
+  const response = await fetch(url, options);
 
+  const contentType = response.headers.get("content-type") || "";
+
+  if (!contentType.includes("application/json")) {
+    throw new Error(`Expected JSON but got ${contentType}`);
+  }
+
+  return await response.json();
+}
 const btn = document.getElementById("checkBtn");
 const clearBtn = document.getElementById("clearBtn");
 const input = document.getElementById("medicineInput");
@@ -159,8 +169,9 @@ async function loadSuggestions() {
 
 async function loadHistory() {
   try {
-    const res = await fetch("/api/history");
-    const data = await res.json();
+    const data = await safeApiFetch("/api/history/clear", {
+  method: "POST"
+});
     if (!data.success) return;
 
     const items = data.history || [];
@@ -190,8 +201,7 @@ async function loadHistory() {
 
 async function loadFavorites() {
   try {
-    const res = await fetch("/api/favorites");
-    const data = await res.json();
+    const data = await safeApiFetch("/api/favorites");
     if (!data.success) return;
 
     const favs = data.favorites || [];
