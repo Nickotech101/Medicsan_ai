@@ -1904,21 +1904,22 @@ Return JSON ONLY:
 
 @app.errorhandler(404)
 def handle_api_404(e):
-if request.path.startswith("/api/"):
-return jsonify({
-"status": "error",
-"message": f"API endpoint not found: {request.path}"
-}), 404
-return e
+    if request.path.startswith("/api/"):
+        return jsonify({
+            "status": "error",
+            "message": f"API endpoint not found: {request.path}"
+        }), 404
+    return e
+
 
 @app.errorhandler(500)
 def handle_api_500(e):
-if request.path.startswith("/api/"):
-return jsonify({
-"status": "error",
-"message": "Internal server error."
-}), 500
-return e
+    if request.path.startswith("/api/"):
+        return jsonify({
+            "status": "error",
+            "message": "Internal server error."
+        }), 500
+    return e
 
 
 if __name__ == "__main__":
