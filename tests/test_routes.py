@@ -63,21 +63,26 @@ def test_api_suggestions(client, mocker):
     assert any(s.lower().startswith("para") for s in data["suggestions"])
 
 
-def test_api_medicine_no_data(client):
-    response = client.post("/api/medicine", json={})
+def test_api_medicine_unauthenticated(client):
+    # /api/medicine now requires login; unauthenticated requests must be redirected.
+    response = client.post("/api/medicine", json={"medicine": "paracetamol"})
+    assert response.status_code in (302, 401)
+
+
+def test_api_medicine_no_data(logged_in_client):
+    # Authenticated request with an empty body must still return 400.
+    response = logged_in_client.post("/api/medicine", json={})
     assert response.status_code == 400
     assert response.get_json()["success"] is False
 
 
-def test_api_medicine_with_data(client, mocker, init_database):
-    # Mock the update_analytics and history to avoid user issues if unauthenticated
+def test_api_medicine_with_data(logged_in_client, mocker):
     mocker.patch("app.update_analytics")
     mocker.patch("app.add_to_history")
 
-    # Mock the database lookup
     mocker.patch.dict("app.MED_DB", {"testmed": {"generic_name": "Test Generic", "use": "Testing"}})
 
-    response = client.post("/api/medicine", json={"medicine": "testmed"})
+    response = logged_in_client.post("/api/medicine", json={"medicine": "testmed"})
     assert response.status_code == 200
     data = response.get_json()
     assert data["success"] is True

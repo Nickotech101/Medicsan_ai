@@ -7,6 +7,8 @@ from io import BytesIO
 import requests
 from dotenv import load_dotenv
 from flask import Flask, flash, jsonify, redirect, render_template, request, send_file, url_for
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from flask_login import (
     LoginManager,
     UserMixin,
@@ -36,6 +38,14 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
+
+# Rate limiter -- keyed per remote IP, stored in process memory.
+# Disable in tests by setting RATELIMIT_ENABLED = False in the app config.
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    storage_uri="memory://",
+)
 
 
 class User(UserMixin, db.Model):
@@ -429,6 +439,8 @@ def analytics_api():
 
 
 @app.route("/api/medicine", methods=["POST"])
+@login_required
+@limiter.limit("20 per minute")
 def medicine_info():
     try:
         data = request.get_json()

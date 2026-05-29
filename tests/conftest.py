@@ -13,6 +13,8 @@ def app():
             "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
             "WTF_CSRF_ENABLED": False,
             "SECRET_KEY": "test_secret_key",
+            # Disable Flask-Limiter so rate limits do not interfere with test counts.
+            "RATELIMIT_ENABLED": False,
         }
     )
 
@@ -38,3 +40,11 @@ def init_database(app):
 
         db.session.remove()
         db.drop_all()
+
+
+@pytest.fixture
+def logged_in_client(client, init_database):
+    """Return a test client that is already logged in as a test user."""
+    client.post("/register", data={"username": "testuser", "password": "testpass123"})
+    client.post("/login", data={"username": "testuser", "password": "testpass123"})
+    return client
